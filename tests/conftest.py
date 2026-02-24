@@ -58,7 +58,7 @@ _MOCK_PACKAGES = [
     "requests",
     "Crypto",
     "Cryptodome",
-    "PIL",
+    # "PIL" — not mocked; pillow is installed for map_renderer tests
     "aiohttp",
     "cryptography",
     "micloud",
