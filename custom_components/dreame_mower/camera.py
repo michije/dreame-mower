@@ -443,12 +443,10 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
     ) -> None:
         """Initialize a Dreame Mower Camera entity."""
         super().__init__(coordinator, description)
+        Camera.__init__(self)
         self._generate_entity_id(ENTITY_ID_FORMAT)
         self.content_type = PNG_CONTENT_TYPE
         self.stream = None
-        self._access_token_update_counter = 0
-        self.access_tokens = collections.deque([], 2)
-        self.async_update_token()
         self._rtsp_to_webrtc = False
         self._should_poll = True
         self._last_updated = -1
