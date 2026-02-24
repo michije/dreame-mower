@@ -16,26 +16,25 @@ _LOGGER = logging.getLogger(__name__)
 _MAX_IMAGE_SIZE = 2048  # Max pixels on longest side
 _MIN_IMAGE_SIZE = 400   # Min pixels on longest side
 _PADDING = 40           # Pixel padding around map edges
-_BACKGROUND_COLOR = (30, 30, 30)  # Dark grey background
-_ZONE_OUTLINE_COLOR = (255, 255, 255, 180)  # White outlines
+_BACKGROUND_COLOR = (245, 245, 240)  # Light warm grey background (matches app)
 _ZONE_OUTLINE_WIDTH = 2
-_PATH_COLOR = (200, 200, 100, 150)  # Yellow-ish for navigation paths
-_PATH_WIDTH = 2
+_PATH_COLOR = (180, 180, 180, 200)  # Light grey for navigation paths (matches app)
+_PATH_WIDTH = 3
 _MOW_PATH_COLOR = (100, 200, 100, 100)  # Green for mowing trails
 _MOW_PATH_WIDTH = 1
-_LABEL_COLOR = (255, 255, 255, 220)  # White text
+_LABEL_COLOR = (60, 60, 60, 255)  # Dark text on light background
 _FORBIDDEN_COLOR = (200, 50, 50, 120)  # Red for no-go zones
 
-# Zone fill colors — distinct colors for up to 8 zones, cycling after
+# Zone fill colors — soft pastels matching the Dreame app palette
 _ZONE_COLORS = [
-    (76, 153, 0, 140),    # Green
-    (0, 128, 128, 140),   # Teal
-    (0, 102, 204, 140),   # Blue
-    (153, 102, 0, 140),   # Brown
-    (102, 51, 153, 140),  # Purple
-    (204, 102, 0, 140),   # Orange
-    (0, 153, 153, 140),   # Cyan
-    (153, 153, 0, 140),   # Olive
+    ((164, 210, 145, 200), (134, 190, 115, 255)),  # Green (fill, outline)
+    ((160, 200, 220, 200), (130, 170, 200, 255)),   # Blue
+    ((240, 200, 170, 200), (220, 175, 140, 255)),   # Beige/tan
+    ((240, 180, 180, 200), (220, 150, 150, 255)),   # Pink/salmon
+    ((230, 220, 160, 200), (210, 200, 130, 255)),   # Yellow
+    ((190, 170, 220, 200), (170, 145, 200, 255)),   # Purple
+    ((170, 215, 210, 200), (140, 195, 190, 255)),   # Teal
+    ((220, 190, 160, 200), (200, 165, 130, 255)),   # Warm brown
 ]
 
 
@@ -104,20 +103,31 @@ class MowerVectorMapRenderer:
         draw = ImageDraw.Draw(image)
 
         def to_pixel(x: int, y: int) -> tuple[int, int]:
-            """Convert map coordinates to pixel coordinates."""
+            """Convert map coordinates to pixel coordinates.
+
+            Map coordinates: Y increases upward (north).
+            Pixel coordinates: Y increases downward.
+            No flip needed — higher Y values in map coords should appear
+            higher (lower pixel Y) on screen, so we invert.
+            """
             px = int((x - boundary.x1) * scale) + _PADDING
-            # Flip Y axis — map coords have Y increasing downward,
-            # but we want Y=0 at top of image for natural "north up" view
-            py = img_h - (int((y - boundary.y1) * scale) + _PADDING)
+            py = int((y - boundary.y1) * scale) + _PADDING
             return (px, py)
+
+        # Load font for labels — try larger size first
+        try:
+            font = ImageFont.load_default(size=16)
+        except TypeError:
+            # Older Pillow without size param
+            font = ImageFont.load_default()
 
         # 1. Draw zone fills
         for i, zone in enumerate(vmap.zones):
             if len(zone.path) < 3:
                 continue
-            color = _ZONE_COLORS[i % len(_ZONE_COLORS)]
+            fill_color, outline_color = _ZONE_COLORS[i % len(_ZONE_COLORS)]
             polygon = [to_pixel(x, y) for x, y in zone.path]
-            draw.polygon(polygon, fill=color, outline=_ZONE_OUTLINE_COLOR, width=_ZONE_OUTLINE_WIDTH)
+            draw.polygon(polygon, fill=fill_color, outline=outline_color, width=_ZONE_OUTLINE_WIDTH)
 
         # 2. Draw forbidden areas
         for zone in vmap.forbidden_areas:
@@ -149,20 +159,8 @@ class MowerVectorMapRenderer:
             cx = sum(x for x, y in zone.path) // len(zone.path)
             cy = sum(y for x, y in zone.path) // len(zone.path)
             px, py = to_pixel(cx, cy)
-            # Draw label with area
+            # Draw label (name only, clean like the app)
             label = zone.name
-            if zone.area > 0:
-                label += f"\n{zone.area:.0f}m\u00b2"
-            try:
-                font = ImageFont.load_default()
-            except Exception:
-                font = None
-            bbox = draw.textbbox((px, py), label, font=font, anchor="mm")
-            # Draw background rectangle for readability
-            draw.rectangle(
-                [bbox[0] - 3, bbox[1] - 2, bbox[2] + 3, bbox[3] + 2],
-                fill=(0, 0, 0, 160),
-            )
             draw.text((px, py), label, fill=_LABEL_COLOR, font=font, anchor="mm")
 
         return image
