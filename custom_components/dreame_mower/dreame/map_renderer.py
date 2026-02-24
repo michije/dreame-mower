@@ -112,12 +112,24 @@ class MowerVectorMapRenderer:
             py = int((y - boundary.y1) * scale) + _PADDING
             return (px, py)
 
-        # Load font for labels — try larger size first
-        try:
-            font = ImageFont.load_default(size=16)
-        except TypeError:
-            # Older Pillow without size param
-            font = ImageFont.load_default()
+        # Load font for labels
+        font = None
+        for font_path in [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",      # Linux/Docker
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",       # Linux alt
+            "/System/Library/Fonts/Helvetica.ttc",                    # macOS
+            "/System/Library/Fonts/SFCompact.ttf",                    # macOS alt
+        ]:
+            try:
+                font = ImageFont.truetype(font_path, size=48)
+                break
+            except (OSError, IOError):
+                continue
+        if font is None:
+            try:
+                font = ImageFont.load_default(size=40)
+            except TypeError:
+                font = ImageFont.load_default()
 
         # 1. Draw zone fills
         for i, zone in enumerate(vmap.zones):
@@ -157,8 +169,10 @@ class MowerVectorMapRenderer:
             cx = sum(x for x, y in zone.path) // len(zone.path)
             cy = sum(y for x, y in zone.path) // len(zone.path)
             px, py = to_pixel(cx, cy)
-            # Draw label (name only, clean like the app)
             label = zone.name
+            # Subtle white shadow for readability on colored zones
+            for dx, dy in [(-2, -2), (-2, 2), (2, -2), (2, 2), (-2, 0), (2, 0), (0, -2), (0, 2)]:
+                draw.text((px + dx, py + dy), label, fill=(255, 255, 255, 120), font=font, anchor="mm")
             draw.text((px, py), label, fill=_LABEL_COLOR, font=font, anchor="mm")
 
         return image

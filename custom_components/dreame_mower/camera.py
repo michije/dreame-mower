@@ -443,6 +443,10 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
     ) -> None:
         """Initialize a Dreame Mower Camera entity."""
         super().__init__(coordinator, description)
+        # Set attributes needed by async_update_token() before Camera.__init__
+        # calls it during setup
+        self._access_token_update_counter = 0
+        self.access_tokens = collections.deque([], 2)
         Camera.__init__(self)
         self._generate_entity_id(ENTITY_ID_FORMAT)
         self.content_type = PNG_CONTENT_TYPE
@@ -632,6 +636,26 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
 
     def update(self) -> None:
         map_data = self._map_data
+
+        # Try vector map rendering even without pixel map data
+        vector_map = self.device.vector_map if self.device else None
+        if vector_map and vector_map.boundary and self.map_index == 0 and not self.map_data_json:
+            vmap_updated = vector_map.last_updated
+            if vmap_updated and vmap_updated != self._last_updated and self._vector_renderer.render_complete:
+                self._last_updated = vmap_updated
+                self._default_map = False
+                self._state = datetime.fromtimestamp(int(vmap_updated))
+                self.coordinator.hass.async_create_task(
+                    self._update_image(
+                        self.device.get_map_for_render(self._map_data) if map_data else None,
+                        self.device.status.robot_status,
+                        0,  # station_status not applicable for mowers
+                    )
+                )
+            # Always return when vector map exists — don't fall through to
+            # pixel map path which would reset state to unavailable
+            return
+
         if map_data and self.device.cloud_connected and (self.map_index > 0 or self.device.status.located):
             self._device_active = self.device.status.active
             if map_data.last_updated:
