@@ -20,8 +20,8 @@ _BACKGROUND_COLOR = (245, 245, 240)  # Light warm grey background (matches app)
 _ZONE_OUTLINE_WIDTH = 2
 _PATH_COLOR = (180, 180, 180, 200)  # Light grey for navigation paths (matches app)
 _PATH_WIDTH = 3
-_MOW_PATH_COLOR = (100, 200, 100, 100)  # Green for mowing trails
-_MOW_PATH_WIDTH = 1
+_MOW_PATH_COLOR = (50, 120, 50, 180)  # Dark green for mowing trails
+_MOW_PATH_WIDTH = 2
 _LABEL_COLOR = (60, 60, 60, 255)  # Dark text on light background
 _FORBIDDEN_COLOR = (200, 50, 50, 120)  # Red for no-go zones
 
