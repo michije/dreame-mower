@@ -124,5 +124,6 @@ def test_parse_mow_paths_with_sentinel():
     # Should have segments split on sentinel
     mow_path = result[0]
     assert len(mow_path.segments) == 2
-    assert mow_path.segments[0] == [(10, 20), (30, 40)]
-    assert mow_path.segments[1] == [(50, 60), (70, 80)]
+    # Coordinates are scaled 10x (decimeters -> centimeters)
+    assert mow_path.segments[0] == [(100, 200), (300, 400)]
+    assert mow_path.segments[1] == [(500, 600), (700, 800)]

@@ -160,22 +160,24 @@ def parse_mow_paths(batch_data: dict) -> list[MowerMowPath]:
     # Extract all [x,y] coordinate pairs using regex.
     # This is robust against chunk boundary artifacts since it
     # only matches well-formed [int,int] pairs.
+    # M_PATH coordinates are at 1/10th scale compared to zone coordinates
+    # (decimeters vs centimeters), so we scale by 10 after sentinel detection.
     pair_pattern = re.compile(r"\[(-?\d+),(-?\d+)\]")
-    pairs = [(int(m.group(1)), int(m.group(2))) for m in pair_pattern.finditer(raw)]
+    raw_pairs = [(int(m.group(1)), int(m.group(2))) for m in pair_pattern.finditer(raw)]
 
-    if not pairs:
+    if not raw_pairs:
         return []
 
-    # Split on sentinel into segments
+    # Split on sentinel into segments, then scale coordinates
     segments = []
     current_segment = []
-    for p in pairs:
+    for p in raw_pairs:
         if p == _PATH_SENTINEL:
             if current_segment:
                 segments.append(current_segment)
                 current_segment = []
         else:
-            current_segment.append(p)
+            current_segment.append((p[0] * 10, p[1] * 10))
 
     if current_segment:
         segments.append(current_segment)
