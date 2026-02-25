@@ -19,7 +19,7 @@ from .entity import DreameMowerEntity
 
 from .dreame.const import STATUS_PROPERTY, map_status_to_activity, POSE_COVERAGE_PROPERTY
 from .dreame.property.pose_coverage import POSE_COVERAGE_COORDINATES_PROPERTY_NAME
-from .dreame.svg_map_generator import generate_svg_live_image, generate_svg_map_image
+from .dreame.svg_map_generator import generate_svg_live_image, generate_svg_map_image, generate_svg_vector_map
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -84,9 +84,12 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
     async def async_added_to_hass(self) -> None:
         """Called when entity is added to Home Assistant."""
         await super().async_added_to_hass()
-        
+
         # Build initial historical files cache now that hass is available
         self.hass.create_task(self._refresh_historical_files_cache())
+
+        # Fetch vector map from batch API (provides zone map even without historical files)
+        self.hass.create_task(self._async_fetch_vector_map())
 
         # If not docked, request initial pose coverage property and start timer
         if not self._docked:
@@ -103,6 +106,18 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
         # Ensure timer is stopped and cleaned up
         self._stop_pose_coverage_timer()
         await super().async_will_remove_from_hass()
+
+    async def _async_fetch_vector_map(self) -> None:
+        """Fetch vector map data from batch API in background."""
+        try:
+            loop = asyncio.get_event_loop()
+            updated = await loop.run_in_executor(
+                None, self.coordinator.device.fetch_vector_map
+            )
+            if updated:
+                await self._async_update_vector_map_image()
+        except Exception as ex:
+            _LOGGER.warning("Failed to fetch vector map: %s", ex)
 
     async def _async_config_entry_updated(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Handle config entry options update."""
@@ -230,13 +245,17 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
         """Handle property changes from the device."""
         # If device is reachable and we are in live mode but timer is stopped, restart it
         # This handles recovery from offline state
-        if (self.coordinator.device.device_reachable and 
-            not self._docked and 
+        if (self.coordinator.device.device_reachable and
+            not self._docked and
             self._pose_coverage_timer is None):
             _LOGGER.info("Device is back online, resuming pose coverage requests")
             self._start_pose_coverage_timer()
 
-        if property_name == POSE_COVERAGE_COORDINATES_PROPERTY_NAME:
+        if property_name == "vector_map_updated":
+            # Vector map data was fetched — re-render if we have no historical data
+            if not self._current_map_data and self._is_on:
+                self.hass.create_task(self._async_update_vector_map_image())
+        elif property_name == POSE_COVERAGE_COORDINATES_PROPERTY_NAME:
             self._handle_live_coordinates_update(value)
         elif property_name == STATUS_PROPERTY.name:
             new_state = map_status_to_activity(value) == LawnMowerActivity.DOCKED
@@ -382,12 +401,28 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
             _LOGGER.error("Error getting most recent historical file from cache: %s", ex)
             return None
 
+    async def _async_update_vector_map_image(self) -> None:
+        """Update camera image using vector map data from batch API."""
+        vector_map = self.coordinator.device.vector_map
+        if not vector_map or not vector_map.boundary:
+            return
+
+        try:
+            loop = asyncio.get_event_loop()
+            self._image_bytes = await loop.run_in_executor(
+                None,
+                lambda: generate_svg_vector_map(vector_map, rotation=self._current_rotation)
+            )
+        except Exception as ex:
+            _LOGGER.error("Failed to generate vector map image: %s", ex)
+
     async def _async_update_image(self, force_refresh: bool = False) -> None:
         """Update the camera image by generating a new map visualization."""
 
         historical_file = await self._find_most_recent_historical_file(force_refresh=force_refresh)
         if not historical_file:
-            _LOGGER.warning("No historical file found")
+            # No historical files — try vector map from batch API
+            await self._async_update_vector_map_image()
             return
 
         try:

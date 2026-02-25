@@ -16,6 +16,7 @@ from typing import Any, Callable
 from datetime import datetime
 
 from .cloud.cloud_device import DreameMowerCloudDevice
+from .map_data_parser import MowerVectorMap, parse_batch_map_data
 from .utils import download_file
 from .property import (
     MiscPropertyHandler,
@@ -141,6 +142,9 @@ class DreameMowerDevice:
         self._mission_completion_handler = MissionCompletionEventHandler()
         self._pose_coverage_handler = PoseCoveragePropertyHandler()
         
+        # Vector map from batch API
+        self._vector_map: MowerVectorMap | None = None
+
         # Property change callbacks
         self._property_callbacks: list[Callable[[str, Any], None]] = []
         
@@ -318,6 +322,56 @@ class DreameMowerDevice:
     def mowing_path_history(self) -> list[dict[str, Any]]:
         """Return path history for visualization."""
         return self._pose_coverage_handler.path_history
+
+    @property
+    def vector_map(self) -> MowerVectorMap | None:
+        """Return the current vector map data from batch API."""
+        return self._vector_map
+
+    def fetch_vector_map(self) -> bool:
+        """Fetch vector map data from the batch device data API.
+
+        Requests MAP.*, M_PATH.* keys from the cloud batch API
+        and parses them into a MowerVectorMap.
+
+        Returns:
+            True if map data was updated, False otherwise.
+        """
+        if not self._cloud_device.connected:
+            return False
+
+        try:
+            keys = []
+            for i in range(10):
+                keys.append(f"MAP.{i}")
+            keys.append("MAP.info")
+            for i in range(10):
+                keys.append(f"M_PATH.{i}")
+            keys.append("M_PATH.info")
+
+            batch_data = self._cloud_device.get_batch_device_datas(keys)
+            if not batch_data:
+                _LOGGER.debug("No batch data returned from cloud API")
+                return False
+
+            vector_map = parse_batch_map_data(batch_data)
+            if vector_map is None:
+                _LOGGER.debug("Failed to parse batch map data")
+                return False
+
+            self._vector_map = vector_map
+            _LOGGER.info(
+                "Vector map updated: %d zones, %d paths, boundary=%s",
+                len(vector_map.zones),
+                len(vector_map.paths),
+                vector_map.boundary,
+            )
+            self._notify_property_change("vector_map_updated", True)
+            return True
+
+        except Exception as ex:
+            _LOGGER.warning("Failed to fetch vector map from batch API: %s", ex)
+            return False
 
     @property
     def device_id(self) -> str:
