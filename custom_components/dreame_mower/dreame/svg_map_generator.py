@@ -522,8 +522,7 @@ def generate_svg_map_image(data: Dict[str, Any], historical_file_path: str | Non
             # 3. Draw mowing tracks per zone
             for i, (_z_segs, z_tracks, _z_name) in enumerate(zone_data):
                 if z_tracks:
-                    color = ZONE_COLORS[i % len(ZONE_COLORS)][1] if multi_zone else COLORS_SVG['mowing_path']
-                    track_path = svg_path_from_segments(z_tracks, bounds, MAP_IMAGE_WIDTH, MAP_IMAGE_HEIGHT, color, 2)
+                    track_path = svg_path_from_segments(z_tracks, bounds, MAP_IMAGE_WIDTH, MAP_IMAGE_HEIGHT, COLORS_SVG['mowing_path'], 2)
                     if track_path:
                         svg_lines.append(track_path)
 
