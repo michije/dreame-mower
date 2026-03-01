@@ -106,15 +106,22 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
         await super().async_will_remove_from_hass()
 
     async def _async_initial_image_load(self) -> None:
-        """Load initial image: prefer historical files, fall back to batch API vector map."""
+        """Load initial image: prefer historical files, fall back to batch API vector map.
+
+        Always fetches vector map in the background so it's available for live mode,
+        since live pose coordinates use the same coordinate system as the vector map
+        but a different (lower-resolution) system than historical data.
+        """
         await self._refresh_historical_files_cache()
         if self._historical_files_cache:
             await self._async_update_image()
+            # Also fetch vector map for live mode (don't await — non-blocking)
+            self.hass.create_task(self._async_fetch_vector_map_silent())
         else:
             await self._async_fetch_vector_map()
 
     async def _async_fetch_vector_map(self) -> None:
-        """Fetch vector map data from batch API in background."""
+        """Fetch vector map data from batch API and render it as the camera image."""
         try:
             loop = asyncio.get_event_loop()
             updated = await loop.run_in_executor(
@@ -122,6 +129,20 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
             )
             if updated:
                 await self._async_update_vector_map_image()
+        except Exception as ex:
+            _LOGGER.warning("Failed to fetch vector map: %s", ex)
+
+    async def _async_fetch_vector_map_silent(self) -> None:
+        """Fetch vector map data from batch API without rendering.
+
+        Used when historical data is already displayed but we need the vector
+        map cached for live mode coordinate matching.
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None, self.coordinator.device.fetch_vector_map
+            )
         except Exception as ex:
             _LOGGER.warning("Failed to fetch vector map: %s", ex)
 
@@ -316,10 +337,14 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
         vector_map = self.coordinator.device.vector_map
         if vector_map and vector_map.boundary:
             data = vector_map_to_map_data(vector_map)
+            source = "vector_map"
         elif self._current_map_data:
             data = self._current_map_data
+            source = "historical"
         else:
             data = {}
+            source = "empty"
+
         return generate_svg_map_image(
             data, None, self.coordinator,
             rotation=self._current_rotation,

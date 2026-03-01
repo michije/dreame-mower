@@ -331,25 +331,17 @@ class DreameMowerDevice:
     def fetch_vector_map(self) -> bool:
         """Fetch vector map data from the batch device data API.
 
-        Requests MAP.*, M_PATH.* keys from the cloud batch API
-        and parses them into a MowerVectorMap.
+        Requests all keys from the cloud batch API and parses
+        MAP.* and M_PATH.* into a MowerVectorMap.
 
         Returns:
             True if map data was updated, False otherwise.
         """
-        if not self._cloud_device.connected:
-            return False
-
         try:
-            keys = []
-            for i in range(10):
-                keys.append(f"MAP.{i}")
-            keys.append("MAP.info")
-            for i in range(10):
-                keys.append(f"M_PATH.{i}")
-            keys.append("M_PATH.info")
-
-            batch_data = self._cloud_device.get_batch_device_datas(keys)
+            # Pass empty list to get all available keys (MAP.*, M_PATH.*, etc.)
+            # The API returns all keys when no specific keys are requested.
+            # M_PATH can have 28+ chunks depending on path history size.
+            batch_data = self._cloud_device.get_batch_device_datas([])
             if not batch_data:
                 _LOGGER.debug("No batch data returned from cloud API")
                 return False
@@ -360,7 +352,7 @@ class DreameMowerDevice:
                 return False
 
             self._vector_map = vector_map
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Vector map updated: %d zones, %d paths, boundary=%s",
                 len(vector_map.zones),
                 len(vector_map.paths),

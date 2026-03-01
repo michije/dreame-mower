@@ -51,27 +51,36 @@ ZONE_COLORS = [
 ]
 ZONE_LABEL_COLOR = '#3c3c3c'
 
-# Live coordinate scaling factor
-LIVE_Y_COORDINATE_SCALE_FACTOR = 16.0
+# Pose coverage coordinates are in decimeters (like M_PATH data) while
+# vector map zone coordinates are in centimeters.  X needs *10, Y is also
+# encoded with a *16 hardware factor so needs /16 * 10.
+_LIVE_X_SCALE = 10        # decimeters → centimeters
+_LIVE_Y_SCALE = 10 / 16   # decimeters*16 → centimeters (≈0.625)
 
-# The pose coverage Y coordinate is int16 (range -32768..32767).
-# Divided by 16, this covers map Y in [-2048, 2048].  Map zones can extend
-# below -2048 (e.g. Street2 at Y ≈ -2800).  When the true Y*16 underflows
-# int16, the device wraps it by adding 65536, producing a large positive
-# y_raw.  We detect this by comparing the naïve y/16 against the map
-# bounds and correcting with a 65536 subtraction when needed.
+# If a scaled coordinate still falls outside map bounds, the int16 source
+# may have overflowed.  We correct by subtracting the int16 wrap (65536)
+# from the raw value and re-scaling.
 _INT16_WRAP = 65536
 
 
-def _scale_live_y(y_raw: int, map_min_y: int, map_max_y: int) -> int:
-    """Scale a live Y coordinate, correcting for int16 overflow if needed."""
-    naive = int(y_raw / LIVE_Y_COORDINATE_SCALE_FACTOR)
-    # If the naive value is above the map, try the overflow-corrected value
-    if naive > map_max_y + 200:  # 200 units tolerance
-        corrected = int((y_raw - _INT16_WRAP) / LIVE_Y_COORDINATE_SCALE_FACTOR)
-        if map_min_y - 200 <= corrected <= map_max_y + 200:
+def _scale_live_x(x_raw: int, map_min_x: int, map_max_x: int) -> int:
+    """Scale a live X coordinate from decimeters to centimeters."""
+    scaled = int(x_raw * _LIVE_X_SCALE)
+    if scaled > map_max_x + 2000:
+        corrected = int((x_raw - _INT16_WRAP) * _LIVE_X_SCALE)
+        if map_min_x - 2000 <= corrected <= map_max_x + 2000:
             return corrected
-    return naive
+    return scaled
+
+
+def _scale_live_y(y_raw: int, map_min_y: int, map_max_y: int) -> int:
+    """Scale a live Y coordinate from decimeters*16 to centimeters."""
+    scaled = int(y_raw * _LIVE_Y_SCALE)
+    if scaled > map_max_y + 2000:
+        corrected = int((y_raw - _INT16_WRAP) * _LIVE_Y_SCALE)
+        if map_min_y - 2000 <= corrected <= map_max_y + 2000:
+            return corrected
+    return scaled
 
 
 def calculate_bounds(all_points: List[List[int]]) -> Tuple[int, int, int, int]:
@@ -155,8 +164,9 @@ def create_svg_document(width: int, height: int, background_color: str = "white"
     ]
 
 
-def svg_path_from_segments(segments: List[List[List[int]]], bounds: Tuple[int, int, int, int], 
-                          img_width: int, img_height: int, stroke_color: str, stroke_width: int = 2) -> str:
+def svg_path_from_segments(segments: List[List[List[int]]], bounds: Tuple[int, int, int, int],
+                          img_width: int, img_height: int, stroke_color: str, stroke_width: int = 2,
+                          dashed: bool = False) -> str:
     """Create SVG path element from path segments."""
     if not segments:
         return ""
@@ -180,7 +190,8 @@ def svg_path_from_segments(segments: List[List[List[int]]], bounds: Tuple[int, i
                 prev_pixel = (pixel_x, pixel_y)
     
     path_str = " ".join(path_data)
-    return f'<path d="{path_str}" stroke="{stroke_color}" stroke-width="{stroke_width}" fill="none"/>'
+    dash_attr = ' stroke-dasharray="10,5"' if dashed else ''
+    return f'<path d="{path_str}" stroke="{stroke_color}" stroke-width="{stroke_width}"{dash_attr} fill="none"/>'
 
 
 def svg_polygon(points: List[List[int]], bounds: Tuple[int, int, int, int], 
@@ -319,8 +330,8 @@ def generate_svg_map_image(data: Dict[str, Any], historical_file_path: str | Non
             obstacle_data = obstacle.get("data", [])
             all_points.extend(obstacle_data)
 
-        # Add trajectory points (skip in live mode — live path replaces navigation context)
-        trajectories = data.get("trajectory", []) if not live_coordinates else []
+        # Add trajectory points (inter-zone navigation paths)
+        trajectories = data.get("trajectory", [])
         for trajectory in trajectories:
             trajectory_data = trajectory.get("data", [])
             all_points.extend(trajectory_data)
@@ -333,14 +344,16 @@ def generate_svg_map_image(data: Dict[str, Any], historical_file_path: str | Non
                 mower_position = [int(mower_pos[0]), int(mower_pos[1])]
                 all_points.append(mower_position)
 
-        # Add live coordinates to bounds (with Y scaling + int16 overflow correction)
+        # Add live coordinates to bounds (scale from pose units to centimeters)
         if live_coordinates:
-            # Compute map-only bounds first so we can detect Y overflow
+            # Compute map-only bounds first so we can detect overflow
             map_bounds = calculate_bounds(all_points) if all_points else (0, 0, 0, 0)
-            map_min_y, map_max_y = map_bounds[1], map_bounds[3]
+            map_min_x, map_min_y = map_bounds[0], map_bounds[1]
+            map_max_x, map_max_y = map_bounds[2], map_bounds[3]
             for coord in live_coordinates:
-                scaled_y = _scale_live_y(coord['y'], map_min_y, map_max_y)
-                all_points.append([coord['x'], scaled_y])
+                lx = _scale_live_x(coord['x'], map_min_x, map_max_x)
+                ly = _scale_live_y(coord['y'], map_min_y, map_max_y)
+                all_points.append([lx, ly])
 
         if not all_points:
             svg_lines.append(f'<text x="{MAP_IMAGE_WIDTH // 2}" y="{MAP_IMAGE_HEIGHT // 2}" font-family="Arial, sans-serif" font-size="16" fill="{COLORS_SVG["text_color"]}" text-anchor="middle">No map data available</text>')
@@ -429,8 +442,9 @@ def generate_svg_map_image(data: Dict[str, Any], historical_file_path: str | Non
                 if len(live_coordinates) > 1:
                     live_points = []
                     for coord in live_coordinates:
-                        scaled_y = _scale_live_y(coord['y'], map_min_y, map_max_y)
-                        live_points.append([coord['x'], scaled_y])
+                        lx = _scale_live_x(coord['x'], map_min_x, map_max_x)
+                        ly = _scale_live_y(coord['y'], map_min_y, map_max_y)
+                        live_points.append([lx, ly])
 
                     live_path = svg_path_from_segments([live_points], bounds, MAP_IMAGE_WIDTH, MAP_IMAGE_HEIGHT,
                                                       COLORS_SVG['live_path'], 4)
@@ -447,8 +461,9 @@ def generate_svg_map_image(data: Dict[str, Any], historical_file_path: str | Non
                                                COLORS_SVG['current_position'], '#8b0000'))
 
                 elif len(live_coordinates) == 1:
-                    scaled_y = _scale_live_y(live_coordinates[0]['y'], map_min_y, map_max_y)
-                    svg_lines.append(svg_circle(live_coordinates[0]['x'], scaled_y, bounds,
+                    lx = _scale_live_x(live_coordinates[0]['x'], map_min_x, map_max_x)
+                    ly = _scale_live_y(live_coordinates[0]['y'], map_min_y, map_max_y)
+                    svg_lines.append(svg_circle(lx, ly, bounds,
                                                MAP_IMAGE_WIDTH, MAP_IMAGE_HEIGHT, 8,
                                                COLORS_SVG['current_position'], '#8b0000'))
 
@@ -508,10 +523,10 @@ def generate_svg_map_image(data: Dict[str, Any], historical_file_path: str | Non
                 for i in range(1, len(live_coordinates)):
                     prev = live_coordinates[i-1]
                     curr = live_coordinates[i]
-                    dx = curr['x'] - prev['x']
+                    dx = _scale_live_x(curr['x'], map_min_x, map_max_x) - _scale_live_x(prev['x'], map_min_x, map_max_x)
                     dy = _scale_live_y(curr['y'], map_min_y, map_max_y) - _scale_live_y(prev['y'], map_min_y, map_max_y)
                     total_distance += (dx**2 + dy**2) ** 0.5
-                total_distance = total_distance / 1000  # Convert to meters
+                total_distance = total_distance / 1000  # Convert mm to meters
 
             progress_info = ""
             if hasattr(coordinator.device, '_pose_coverage_handler'):
