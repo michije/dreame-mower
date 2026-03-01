@@ -19,7 +19,8 @@ from .entity import DreameMowerEntity
 
 from .dreame.const import STATUS_PROPERTY, map_status_to_activity, POSE_COVERAGE_PROPERTY
 from .dreame.property.pose_coverage import POSE_COVERAGE_COORDINATES_PROPERTY_NAME
-from .dreame.svg_map_generator import generate_svg_live_image, generate_svg_map_image
+from .dreame.map_data_parser import vector_map_to_map_data
+from .dreame.svg_map_generator import generate_svg_map_image
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,7 +63,6 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
 
         # Live mode state
         self._live_coordinates: list[dict[str, Any]] = []  # Current session live coordinates
-        self._base_map_boundary: list[list[int]] = []  # Base map boundary from previous session
         
         # Periodic property request timer for live mode
         self._pose_coverage_timer: Timer | None = None
@@ -84,9 +84,10 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
     async def async_added_to_hass(self) -> None:
         """Called when entity is added to Home Assistant."""
         await super().async_added_to_hass()
-        
-        # Build initial historical files cache now that hass is available
-        self.hass.create_task(self._refresh_historical_files_cache())
+
+        # Build historical files cache first, then render from historical data
+        # or fall back to batch API vector map
+        self.hass.create_task(self._async_initial_image_load())
 
         # If not docked, request initial pose coverage property and start timer
         if not self._docked:
@@ -103,6 +104,47 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
         # Ensure timer is stopped and cleaned up
         self._stop_pose_coverage_timer()
         await super().async_will_remove_from_hass()
+
+    async def _async_initial_image_load(self) -> None:
+        """Load initial image: prefer historical files, fall back to batch API vector map.
+
+        Always fetches vector map in the background so it's available for live mode,
+        since live pose coordinates use the same coordinate system as the vector map
+        but a different (lower-resolution) system than historical data.
+        """
+        await self._refresh_historical_files_cache()
+        if self._historical_files_cache:
+            await self._async_update_image()
+            # Also fetch vector map for live mode (don't await — non-blocking)
+            self.hass.create_task(self._async_fetch_vector_map_silent())
+        else:
+            await self._async_fetch_vector_map()
+
+    async def _async_fetch_vector_map(self) -> None:
+        """Fetch vector map data from batch API and render it as the camera image."""
+        try:
+            loop = asyncio.get_event_loop()
+            updated = await loop.run_in_executor(
+                None, self.coordinator.device.fetch_vector_map
+            )
+            if updated:
+                await self._async_update_vector_map_image()
+        except Exception as ex:
+            _LOGGER.warning("Failed to fetch vector map: %s", ex)
+
+    async def _async_fetch_vector_map_silent(self) -> None:
+        """Fetch vector map data from batch API without rendering.
+
+        Used when historical data is already displayed but we need the vector
+        map cached for live mode coordinate matching.
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None, self.coordinator.device.fetch_vector_map
+            )
+        except Exception as ex:
+            _LOGGER.warning("Failed to fetch vector map: %s", ex)
 
     async def _async_config_entry_updated(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Handle config entry options update."""
@@ -230,13 +272,17 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
         """Handle property changes from the device."""
         # If device is reachable and we are in live mode but timer is stopped, restart it
         # This handles recovery from offline state
-        if (self.coordinator.device.device_reachable and 
-            not self._docked and 
+        if (self.coordinator.device.device_reachable and
+            not self._docked and
             self._pose_coverage_timer is None):
             _LOGGER.info("Device is back online, resuming pose coverage requests")
             self._start_pose_coverage_timer()
 
-        if property_name == POSE_COVERAGE_COORDINATES_PROPERTY_NAME:
+        if property_name == "vector_map_updated":
+            # Vector map data was fetched — re-render if we have no historical data
+            if not self._current_map_data and self._is_on:
+                self.hass.create_task(self._async_update_vector_map_image())
+        elif property_name == POSE_COVERAGE_COORDINATES_PROPERTY_NAME:
             self._handle_live_coordinates_update(value)
         elif property_name == STATUS_PROPERTY.name:
             new_state = map_status_to_activity(value) == LawnMowerActivity.DOCKED
@@ -254,10 +300,6 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
     def _handle_live_coordinates_update(self, coordinates_data: dict[str, Any]) -> None:
         """Handle live coordinate updates during mowing session."""
         try:
-            # If not in live mode yet, switch to live mode (new session starting)
-            if not self._live_coordinates:
-                self._extract_base_map_boundary()
-            
             # Add coordinates to live tracking
             self._live_coordinates.append(coordinates_data)
             
@@ -271,27 +313,6 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
                             
         except Exception as ex:
             _LOGGER.error("Error handling live coordinates update: %s", ex)
-
-    def _extract_base_map_boundary(self) -> None:
-        """Extract base map boundary from current map data for live mode overlay."""
-        try:
-            self._base_map_boundary.clear()
-            
-            if not self._current_map_data:
-                return
-                
-            map_items = self._current_map_data["map"]
-            all_boundary_points = []
-            for item in map_items:
-                item_data = item.get("data", [])
-                for point in item_data:
-                    if point[0] != 2147483647 and point[1] != 2147483647:
-                        all_boundary_points.append(point)
-            
-            self._base_map_boundary = all_boundary_points
-                        
-        except Exception as ex:
-            _LOGGER.error("Error extracting base map boundary: %s", ex)
 
     async def _async_update_live_image(self) -> None:
         """Update camera image with live coordinates overlay."""
@@ -310,13 +331,24 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
             _LOGGER.error("Failed to update live image: %s", ex)
 
     def _generate_live_image(self) -> bytes:
-        """Generate live map image in SVG format with current coordinates overlay."""
-        return generate_svg_live_image(
-            self._live_coordinates,
-            self._base_map_boundary,
-            self._current_map_data,
-            self.coordinator,
-            rotation=self._current_rotation
+        """Generate live map image in SVG format with current coordinates overlay on vector map."""
+        # Prefer vector map from batch API — same coordinate system as live pose data.
+        # Historical map data uses a different (higher-resolution) coordinate system.
+        vector_map = self.coordinator.device.vector_map
+        if vector_map and vector_map.boundary:
+            data = vector_map_to_map_data(vector_map)
+            source = "vector_map"
+        elif self._current_map_data:
+            data = self._current_map_data
+            source = "historical"
+        else:
+            data = {}
+            source = "empty"
+
+        return generate_svg_map_image(
+            data, None, self.coordinator,
+            rotation=self._current_rotation,
+            live_coordinates=self._live_coordinates
         )
 
     @property
@@ -382,12 +414,30 @@ class DreameMowerCameraEntity(DreameMowerEntity, Camera):
             _LOGGER.error("Error getting most recent historical file from cache: %s", ex)
             return None
 
+    async def _async_update_vector_map_image(self) -> None:
+        """Update camera image using vector map data from batch API."""
+        vector_map = self.coordinator.device.vector_map
+        if not vector_map or not vector_map.boundary:
+            return
+
+        try:
+            data = vector_map_to_map_data(vector_map)
+            loop = asyncio.get_event_loop()
+            self._image_bytes = await loop.run_in_executor(
+                None,
+                self._generate_map_image,
+                data,
+            )
+        except Exception as ex:
+            _LOGGER.error("Failed to generate vector map image: %s", ex)
+
     async def _async_update_image(self, force_refresh: bool = False) -> None:
         """Update the camera image by generating a new map visualization."""
 
         historical_file = await self._find_most_recent_historical_file(force_refresh=force_refresh)
         if not historical_file:
-            _LOGGER.warning("No historical file found")
+            # No historical files — try vector map from batch API
+            await self._async_update_vector_map_image()
             return
 
         try:
