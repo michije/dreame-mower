@@ -259,9 +259,9 @@ def vector_map_to_map_data(vector_map: MowerVectorMap) -> dict:
 
         # Build track from matching mow_path segments, joined with sentinels
         track: list[list[int]] = []
-        mp = mow_paths_by_zone.get(zone.zone_id)
-        if mp:
-            for i, seg in enumerate(mp.segments):
+        zone_mp = mow_paths_by_zone.get(zone.zone_id)
+        if zone_mp:
+            for i, seg in enumerate(zone_mp.segments):
                 if i > 0:
                     track.append(sentinel)
                 track.extend([x, y] for x, y in seg)
@@ -277,7 +277,7 @@ def vector_map_to_map_data(vector_map: MowerVectorMap) -> dict:
     # If mow_paths have zone_id=0 (unassigned), attach to all zones or as standalone
     mp_unassigned = mow_paths_by_zone.get(0)
     if mp_unassigned and not any(z.zone_id == 0 for z in vector_map.zones):
-        track: list[list[int]] = []
+        track = []
         for i, seg in enumerate(mp_unassigned.segments):
             if i > 0:
                 track.append(sentinel)
