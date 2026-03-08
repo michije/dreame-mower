@@ -33,4 +33,4 @@ jobs:
 
       - name: "Run mypy"
         run: |
-          python -m mypy custom_components/dreame_mower/ --ignore-missing-imports
+          python -m mypy custom_components/dreame_mower/ --ignore-missing-imports --python-version 3.14
