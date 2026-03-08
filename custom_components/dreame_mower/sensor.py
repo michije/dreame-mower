@@ -14,6 +14,7 @@ from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfArea
 from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import DreameMowerCoordinator
 from .entity import DreameMowerEntity
+from .config_flow import DEVICE_TYPE_SWBOT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,16 +27,22 @@ async def async_setup_entry(
     """Set up Dreame Mower sensors from config entry."""
     coordinator: DreameMowerCoordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
     
-    # Create minimal essential sensors for a lawn mower
-    sensors = [
-        DreameMowerBatterySensor(coordinator),
-        DreameMowerStatusSensor(coordinator),
-        DreameMowerChargingStatusSensor(coordinator),
-        DreameMowerBluetoothSensor(coordinator),
-        DreameMowerDeviceCodeSensor(coordinator),
-        DreameMowerTaskSensor(coordinator),
-        DreameMowerProgressSensor(coordinator),
-    ]
+    if coordinator.device_type == DEVICE_TYPE_SWBOT:
+        sensors = [
+            DreameMowerBatterySensor(coordinator),
+            DreameMowerStatusSensor(coordinator),
+        ]
+    else:
+        # Full mower sensor set
+        sensors = [
+            DreameMowerBatterySensor(coordinator),
+            DreameMowerStatusSensor(coordinator),
+            DreameMowerChargingStatusSensor(coordinator),
+            DreameMowerBluetoothSensor(coordinator),
+            DreameMowerDeviceCodeSensor(coordinator),
+            DreameMowerTaskSensor(coordinator),
+            DreameMowerProgressSensor(coordinator),
+        ]
     
     async_add_entities(sensors)
 

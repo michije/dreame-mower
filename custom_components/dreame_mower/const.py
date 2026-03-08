@@ -11,3 +11,4 @@ CONF_MAP_ROTATION: Final = "map_rotation"
 
 # Data storage keys
 DATA_COORDINATOR = "coordinator"
+DATA_PLATFORMS = "platforms"

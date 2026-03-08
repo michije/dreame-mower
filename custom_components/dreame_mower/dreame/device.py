@@ -914,3 +914,43 @@ class DreameMowerDevice:
        
         self._notify_property_change("activity", "docked")
         return True
+
+
+class DreamePoolRobotDevice(DreameMowerDevice):
+    """Device handler for Dreame pool robots (dreame.swbot.* series).
+
+    The Z1 only exposes three MiOT properties via REST/MQTT:
+      2:1  status
+      3:1  battery
+      1:1  capability array (pushed every ~60 s, not yet decoded)
+
+    Everything else (scheduling, device-codes, OTA, maps …) is mower-specific
+    and returns code=-1 on this hardware, so we simply skip it.
+    """
+
+    def _handle_mqtt_property_update(self, message: dict[str, Any]) -> bool:
+        """Handle MQTT property updates — only battery and status are supported."""
+        try:
+            siid = message["siid"]
+            piid = message["piid"]
+
+            if BATTERY_PROPERTY.matches(siid, piid):
+                battery_value = int(message["value"])
+                old_battery = self._battery_percent
+                self._battery_percent = battery_value
+                if old_battery != battery_value:
+                    self._notify_property_change(BATTERY_PROPERTY.name, battery_value)
+                return True
+
+            if STATUS_PROPERTY.matches(siid, piid):
+                status_code = int(message["value"])
+                old_status_code = self._status_code
+                self._status_code = status_code
+                if old_status_code != status_code:
+                    self._notify_property_change(STATUS_PROPERTY.name, status_code)
+                return True
+
+        except Exception as ex:
+            _LOGGER.warning("DreamePoolRobotDevice: error handling property update: %s", ex)
+
+        return False

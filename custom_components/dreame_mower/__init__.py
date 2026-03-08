@@ -12,13 +12,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .const import DATA_COORDINATOR, DOMAIN
+from .const import DATA_COORDINATOR, DATA_PLATFORMS, DOMAIN
 from .coordinator import DreameMowerCoordinator
+from .config_flow import DEVICE_TYPE_SWBOT
 
-PLATFORMS = (
+_MOWER_PLATFORMS = (
     Platform.LAWN_MOWER,
     Platform.SENSOR,
     Platform.CAMERA,
+)
+_SWBOT_PLATFORMS = (
+    Platform.SENSOR,
 )
 
 
@@ -27,6 +31,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Create coordinator
     coordinator = DreameMowerCoordinator(hass, entry=entry)
+    
+    platforms = (
+        _SWBOT_PLATFORMS
+        if coordinator.device_type == DEVICE_TYPE_SWBOT
+        else _MOWER_PLATFORMS
+    )
     
     # Connect to the device
     await coordinator.async_connect_device()
@@ -40,10 +50,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Store coordinator in hass data
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         DATA_COORDINATOR: coordinator,
+        DATA_PLATFORMS: platforms,
     }
 
     # Set up all platforms for this device/entry.
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, platforms)
 
     return True
 
@@ -52,9 +63,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     # Disconnect device before unloading
     coordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
+    entry_platforms = hass.data[DOMAIN][entry.entry_id][DATA_PLATFORMS]
     await coordinator.async_disconnect_device()
     
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, entry_platforms):
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok

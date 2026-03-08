@@ -19,12 +19,14 @@ from .config_flow import (
     CONF_MAC, 
     CONF_MODEL, 
     CONF_SERIAL, 
+    CONF_DEVICE_TYPE,
+    DEVICE_TYPE_SWBOT,
     NOTIFICATION_INFORMATION,
     NOTIFICATION_WARNING,
     NOTIFICATION_ERROR,
     NOTIFICATION_MQTT_DISCOVERY,
 )
-from .dreame.device import DreameMowerDevice
+from .dreame.device import DreameMowerDevice, DreamePoolRobotDevice
 from .dreame.issue_reporter import DreameMowerIssueReporter
 from .dreame.property import (
     DEVICE_CODE_ERROR_PROPERTY_NAME,
@@ -50,7 +52,12 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Initialize Dreame Mower coordinator."""
         self.entry = entry
 
-        self.device = DreameMowerDevice(
+        device_cls = (
+            DreamePoolRobotDevice
+            if entry.data.get(CONF_DEVICE_TYPE) == DEVICE_TYPE_SWBOT
+            else DreameMowerDevice
+        )
+        self.device = device_cls(
             entry.data[CONF_DID],
             entry.data[CONF_USERNAME],
             entry.data[CONF_PASSWORD],
@@ -99,6 +106,11 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "mower_heading": self.mower_heading,
             "mowing_path_history": self.mowing_path_history,
         }
+
+    @property
+    def device_type(self) -> str:
+        """Return device type ('mower' or 'swbot')."""
+        return self.entry.data.get(CONF_DEVICE_TYPE, "mower")
 
     @property
     def device_mac(self) -> str:

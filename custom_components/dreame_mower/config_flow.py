@@ -30,6 +30,10 @@ CONF_COUNTRY = "country"
 CONF_MAC = "mac"
 CONF_DID = "did"
 CONF_ACCOUNT_TYPE = "account_type"
+CONF_DEVICE_TYPE = "device_type"
+
+DEVICE_TYPE_MOWER = "mower"
+DEVICE_TYPE_SWBOT = "swbot"
 
 # Account type titles
 ACCOUNT_TITLE_DREAME = "Dreamehome Account"
@@ -39,6 +43,7 @@ ACCOUNT_TITLE_MOVA = "MOVAhome Account"
 DREAME_MODELS = [
     "dreame.mower.",
     "mova.mower.",
+    "dreame.swbot.",
 ]
 
 model_map = {
@@ -48,7 +53,14 @@ model_map = {
     "mova.mower.g2405a": "MOVA 600",
     "mova.mower.g2405b": "MOVA 600 Kit",
     "mova.mower.g2405c": "MOVA 1000",
+    "dreame.swbot.g2509": "Dreame Z1",
 }
+
+def _device_type_for_model(model: str) -> str:
+    """Derive device type from model string."""
+    if model.startswith("dreame.swbot."):
+        return DEVICE_TYPE_SWBOT
+    return DEVICE_TYPE_MOWER
 
 # Notification options - focused on error, warning and info notifications
 NOTIFICATION_INFORMATION = "information"
@@ -322,6 +334,7 @@ class DreameMowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Fallback: keep using the device name if an unexpected type appears
                 entry_title = self.name
 
+            assert self.model is not None
             return self.async_create_entry(
                 title=entry_title,
                 data={
@@ -334,6 +347,7 @@ class DreameMowerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_MODEL: self.model,
                     CONF_SERIAL: self.serial_number,
                     CONF_ACCOUNT_TYPE: self.account_type,
+                    CONF_DEVICE_TYPE: _device_type_for_model(self.model),
                 },
                 options={
                     CONF_NOTIFY: user_input[CONF_NOTIFY],
