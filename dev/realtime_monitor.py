@@ -47,6 +47,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -180,7 +181,10 @@ for siid, piid in ADDITIONAL_PROPERTIES:
 def _load_creds_from_launch() -> Dict[str, str]:
     launch_json_path = ROOT_DIR / ".vscode" / "launch.json"
     with open(launch_json_path, "r", encoding="utf-8") as f:
-        launch_config = json.load(f)
+        raw = f.read()
+    # Strip // line comments (JSONC) so Python's json module can parse the file
+    raw = re.sub(r"//[^\n]*", "", raw)
+    launch_config = json.loads(raw)
     configs = launch_config.get("configurations", [])
     # choose first config containing 'CLI' else fallback to first
     debug_config = next((c for c in configs if "CLI" in c.get("name", "")), configs[0] if configs else None)

@@ -201,17 +201,19 @@ class DeviceDataAnalyzer:
         # Import credentials from launch.json (same as CLI debug)
         try:
             launch_json_path = Path(__file__).parent.parent / ".vscode" / "launch.json"
-            with open(launch_json_path, "r") as f:
-                launch_config = json.load(f)
-                configs = launch_config["configurations"]
-                debug_config = next(c for c in configs if "CLI" in c.get("name", ""))
-                args = debug_config["args"]
-                
-                # Parse args for credentials
-                username = args[args.index("--username") + 1]
-                password = args[args.index("--password") + 1]
-                device_id = args[args.index("--device_id") + 1]
-                country = "eu"  # default
+            with open(launch_json_path, "r", encoding="utf-8") as f:
+                raw = f.read()
+            raw = re.sub(r"//[^\n]*", "", raw)
+            launch_config = json.loads(raw)
+            configs = launch_config["configurations"]
+            debug_config = next(c for c in configs if "CLI" in c.get("name", ""))
+            args = debug_config["args"]
+            
+            # Parse args for credentials
+            username = args[args.index("--username") + 1]
+            password = args[args.index("--password") + 1]
+            device_id = args[args.index("--device_id") + 1]
+            country = "eu"  # default
                 
         except (FileNotFoundError, KeyError, StopIteration, IndexError) as ex:
             logger.error("❌ Could not load credentials from .vscode/launch.json: %s", ex)
