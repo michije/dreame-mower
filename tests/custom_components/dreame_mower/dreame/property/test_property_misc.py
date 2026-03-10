@@ -52,16 +52,19 @@ class TestProperty11Handler:
         # Check that last_value is stored
         assert handler.last_value == test_data
 
-    def test_parse_value_invalid_length(self):
-        """Test parsing with invalid data length."""
+    def test_parse_value_unknown_length(self):
+        """Test parsing with non-standard data lengths."""
         handler = Property11Handler()
         
-        # Test with too short data
-        result = handler.parse_value([206, 1, 2, 3])
+        # 24-byte variant (mova.mower.g2405c firmware 4.3.6_0062, issue #18) - silently acknowledged
+        result = handler.parse_value([1] + [0] * 22 + [0])
+        assert result is True
+        
+        # Unknown sizes return False to surface new firmware variants
+        result = handler.parse_value([206, 1, 2, 3])  # 4 bytes
         assert result is False
         
-        # Test with too long data
-        result = handler.parse_value([206] * 25)
+        result = handler.parse_value([206] * 25)  # 25 bytes
         assert result is False
 
     def test_parse_value_invalid_type(self):
@@ -72,16 +75,16 @@ class TestProperty11Handler:
         result = handler.parse_value("invalid")
         assert result is False
 
-    def test_parse_value_invalid_sentinels(self):
-        """Test parsing with invalid sentinel values."""
+    def test_parse_value_unknown_sentinels(self):
+        """Test parsing 20-byte array with non-standard sentinel values returns False."""
         handler = Property11Handler()
         
-        # Test with wrong start sentinel
+        # Wrong start sentinel on 20-byte array - unrecognised, return False
         test_data = [100] + [0] * 18 + [206]
         result = handler.parse_value(test_data)
         assert result is False
         
-        # Test with wrong end sentinel
+        # Wrong end sentinel on 20-byte array - unrecognised, return False
         test_data = [206] + [0] * 18 + [100]
         result = handler.parse_value(test_data)
         assert result is False

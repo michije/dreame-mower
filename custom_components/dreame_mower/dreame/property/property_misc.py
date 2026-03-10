@@ -31,31 +31,30 @@ class Property11Handler:
     def parse_value(self, value: list[int]) -> bool:
         """Parse and log property 1:1 value."""
         try:
-            # Validate the data format
-            if not isinstance(value, list) or len(value) != 20:
-                _LOGGER.warning("Property 1:1 invalid format: expected list of 20 integers, got %s", value)
+            if not isinstance(value, list):
+                _LOGGER.warning("Property 1:1 unexpected type: %s, value: %s", type(value), value)
                 return False
-            
-            # Check sentinels (first and last byte should be 206/0xCE)
-            if value[0] != 206 or value[19] != 206:
-                _LOGGER.warning("Property 1:1 invalid sentinels: start=%d, end=%d (expected 206)", value[0], value[19])
-                return False
-            
+
             self._last_value = value.copy()
-            
-            # Extract known payload bytes for logging
-            payload = value[1:19]  # p0..p17
-            raw_battery = payload[10]  # Known: raw battery state with charging flag
-            
-            # Log the property with known interpretations
-            _LOGGER.debug(
-                "Property 1:1 received - raw_battery: %d, payload: %s",
-                raw_battery,
-                payload
-            )
-            
+
+            # Known format: 20-byte array with sentinel 0xCE at positions 0 and 19
+            if len(value) == 20 and value[0] == 206 and value[19] == 206:
+                payload = value[1:19]  # p0..p17
+                raw_battery = payload[10]  # Known: raw battery state with charging flag
+                _LOGGER.debug(
+                    "Property 1:1 received - raw_battery: %d, payload: %s",
+                    raw_battery,
+                    payload
+                )
+            elif len(value) == 24:
+                # 24-byte variant seen on mova.mower.g2405c firmware 4.3.6_0062 (issue #18)
+                _LOGGER.debug("Property 1:1 received (24-byte variant): %s", value)
+            else:
+                _LOGGER.warning("Property 1:1 unrecognised format (len=%d): %s", len(value), value)
+                return False
+
             return True
-                
+
         except Exception as ex:
             _LOGGER.error("Failed to parse property 1:1: %s", ex)
             return False
