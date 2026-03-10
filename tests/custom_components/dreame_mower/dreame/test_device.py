@@ -374,6 +374,26 @@ def test_service2_property_62_handling(device):
     assert ("service2_property_62", 0) in property_changes
 
 
+def test_service2_property_55_handling(device):
+    """Test Service 2 property 55 (2:55) AI obstacle detection handling (issue #32)."""
+    property_changes = []
+    device.register_property_callback(lambda n, v: property_changes.append((n, v)))
+
+    # Real message structure from issue #32
+    message = {
+        "siid": 2,
+        "piid": 55,
+        "value": {
+            "obs": [6125, 18425, 48, 5, "1773059052.181000_0"],
+            "type": "ai",
+        },
+    }
+
+    # Should be handled silently (no notification, no unhandled MQTT)
+    assert device._handle_mqtt_property_update(message) is True
+    assert len(property_changes) == 0
+
+
 def test_service2_property_64_handling(device):
     """Test Service 2 property 64 (2:64) work statistics handling."""
     # Track property changes
