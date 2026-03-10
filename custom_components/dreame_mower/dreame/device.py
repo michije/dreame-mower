@@ -40,6 +40,7 @@ from .const import (
     SCHEDULING_SUMMARY_PROPERTY,
     MOWER_CONTROL_STATUS_PROPERTY,
     POWER_STATE_PROPERTY,
+    SERVICE2_PROPERTY_54,
     SERVICE2_PROPERTY_55,
     SERVICE2_PROPERTY_60,
     SERVICE2_PROPERTY_62,
@@ -684,6 +685,10 @@ class DreameMowerDevice:
                 property_value = int(message["value"])
                 _LOGGER.warning("Service 2 property 63 value observed: %s (see issue #134)", property_value)
                 return False  # Report false to crowdsource more information
+            elif SERVICE2_PROPERTY_54.matches(siid, piid):
+                # Handle Service 2 property 54 (2:54) - meaning unknown, only value seen so far is 100
+                # Silently acknowledge to suppress unhandled MQTT notifications (see issue #25)
+                _LOGGER.debug("Service 2 property 54 received: %s", message.get("value"))
             elif SERVICE2_PROPERTY_55.matches(siid, piid):
                 # Handle Service 2 property 55 (2:55) - likely AI obstacle detection notification
                 # Value contains {"type": "ai", "obs": [x, y, w, class_id, timestamp]}
