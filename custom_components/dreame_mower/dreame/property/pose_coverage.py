@@ -95,6 +95,9 @@ class PoseCoverageHandler:
                 return self._parse_full_format(payload)
             elif payload_length == SHORT_PAYLOAD_LENGTH:
                 return self._parse_short_format(payload)
+            elif payload_length == 8:
+                # 8-byte format observed in issue #24 - meaning unknown, silently acknowledge
+                return True
             else:
                 _LOGGER.warning("Unknown pose coverage payload length: %d bytes", payload_length)
                 return False
