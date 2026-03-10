@@ -129,6 +129,7 @@ class DreameMowerDevice:
         self._bluetooth_connected: bool | None = None
         self._charging_status: str | None = None
         self._ota_state: str | None = None
+        self._ota_progress: int | None = None
         self._device_file_path: str | None = None
         self._firmware_install_state: int | None = None
         self._firmware_download_progress: int | None = None
@@ -223,6 +224,11 @@ class DreameMowerDevice:
     def ota_state(self) -> str | None:
         """Return Over-The-Air update state."""
         return self._ota_state
+
+    @property
+    def ota_progress(self) -> int | None:
+        """Return Over-The-Air update progress (0-100)."""
+        return self._ota_progress
 
     @property
     def device_file_path(self) -> str | None:
@@ -803,6 +809,14 @@ class DreameMowerDevice:
                     if old_ota_state != value:
                         self._notify_property_change("ota_state", value)
                         _LOGGER.debug("OTA state updated: %s", value)
+                    handled_any = True
+                elif key == "ota_progress":
+                    # Handle OTA download progress (0-100) - see issue #19
+                    old_progress = self._ota_progress
+                    self._ota_progress = int(value)
+                    if old_progress != self._ota_progress:
+                        self._notify_property_change("ota_progress", self._ota_progress)
+                        _LOGGER.debug("OTA progress updated: %s%%", self._ota_progress)
                     handled_any = True
                 else:
                     # Log unhandled properties for future implementation

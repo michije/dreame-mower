@@ -345,6 +345,16 @@ def test_handle_mqtt_props_success(device):
     assert ("ota_state", "idle") in property_changes
 
 
+def test_handle_mqtt_props_ota_progress(device):
+    """Test _handle_mqtt_props handles ota_progress (issue #19)."""
+    property_changes = []
+    device.register_property_callback(lambda n, v: property_changes.append((n, v)))
+
+    assert device._handle_mqtt_props({"ota_progress": 42}) is True
+    assert device.ota_progress == 42
+    assert ("ota_progress", 42) in property_changes
+
+
 def test_handle_mqtt_props_failure(device):
     """Test _handle_mqtt_props with unknown parameters (failure case).""" 
     # Track property changes
