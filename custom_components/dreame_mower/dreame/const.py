@@ -74,11 +74,12 @@ SERVICE5_PROPERTY_106 = PropertyIdentifier(siid=5, piid=106, name="service5_prop
 SERVICE5_ENERGY_INDEX_PROPERTY = PropertyIdentifier(siid=5, piid=107, name="service5_energy_index")
 SERVICE5_PROPERTY_108 = PropertyIdentifier(siid=5, piid=108, name="service5_property_108")
 
-# Property 99:10 provides file paths for downloadable files from the cloud, including:
+# Properties 99:10 and 99:20 provide file paths for downloadable files from the cloud, including:
 # - Firmware/OTA update packages (when firmware updates are available)
 # - Device log files (when user selects "Report logs" in the app)
-# Files are automatically downloaded when this property changes
+# Files are automatically downloaded when these properties change
 DEVICE_FILE_PATH_PROPERTY = PropertyIdentifier(siid=99, piid=10, name="device_file_path")
+DEVICE_FILE_PATH_PROPERTY_20 = PropertyIdentifier(siid=99, piid=20, name="device_file_path_20")
 
 # Device event identifiers
 FIRMWARE_VALIDATION_EVENT = EventIdentifier(siid=1, eiid=1, name="firmware_validation")

@@ -235,3 +235,23 @@ def test_log_file_download_success(mock_get, device):
         assert len(download_notifications) == 1
         assert download_notifications[0][1]["path"] == "ali_dreame/2025/10/11/JU954/-1*******1_210019111.0430.pack.tbz2"
         assert download_notifications[0][1]["size_bytes"] == 21
+
+
+def test_device_file_path_piid_20_handled(device):
+    """Test that siid:99, piid:20 is handled the same as piid:10 (issue #26)."""
+    property_changes = []
+
+    def track_changes(prop_name, value):
+        property_changes.append((prop_name, value))
+
+    device.register_property_callback(track_changes)
+
+    message = {
+        "siid": 99,
+        "piid": 20,
+        "value": "ali_dreame/2026/03/03/HT6*****/-1*******3_013****99.0473.bin",
+    }
+
+    assert device._handle_mqtt_property_update(message) is True
+    assert device.device_file_path == "ali_dreame/2026/03/03/HT6*****/-1*******3_013****99.0473.bin"
+    assert ("device_file_path", "ali_dreame/2026/03/03/HT6*****/-1*******3_013****99.0473.bin") in property_changes

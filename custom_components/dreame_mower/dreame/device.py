@@ -63,6 +63,7 @@ from .const import (
     SERVICE5_ENERGY_INDEX_PROPERTY,
     SERVICE5_PROPERTY_108,
     DEVICE_FILE_PATH_PROPERTY,
+    DEVICE_FILE_PATH_PROPERTY_20,
     FIRMWARE_VALIDATION_EVENT,
     MISSION_COMPLETION_EVENT,
     ACTION_START_MOWING,
@@ -705,8 +706,8 @@ class DreameMowerDevice:
                 else:
                     _LOGGER.debug("Unrecognized 2:65 value: %s", property_value_str)
                     return False  # Report false for unrecognized values
-            elif DEVICE_FILE_PATH_PROPERTY.matches(siid, piid):
-                # Handle file path property (99:10) - provides cloud file paths for:
+            elif DEVICE_FILE_PATH_PROPERTY.matches(siid, piid) or DEVICE_FILE_PATH_PROPERTY_20.matches(siid, piid):
+                # Handle file path properties (99:10, 99:20) - provide cloud file paths for:
                 # - Firmware/OTA update packages (when firmware updates are available)
                 # - Device log files (when user selects "Report logs" in the app)
                 device_file_path = str(message["value"])
