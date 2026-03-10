@@ -103,3 +103,45 @@ class TestDeviceMqttPropertyUpdate:
         value = notify_dict[expected_property]
         assert expected_value_check(value), \
             f"Value check failed for property '{expected_property}': {value}"
+
+
+class TestDeviceMqttSilentlyAcknowledged:
+    """Test properties that are silently acknowledged (no HA notification, no unhandled_mqtt)."""
+
+    @pytest.fixture
+    def device(self):
+        """Create a device instance for testing."""
+        with patch('custom_components.dreame_mower.dreame.device.DreameMowerCloudDevice'):
+            device = DreameMowerDevice(
+                device_id="test_device",
+                username="test_user",
+                password="test_pass",
+                account_type="mi",
+                country="de",
+                hass_config_dir="/tmp"
+            )
+            return device
+
+    @pytest.mark.parametrize(
+        "mqtt_message,description",
+        [
+            (  # Issue #12: 2:63 error/status code on mova.mower.g2405a
+                {
+                    "id": 108,
+                    "method": "properties_changed",
+                    "params": [{"did": "-1******29", "piid": 63, "siid": 2, "value": -33101}]
+                },
+                "issue #12: 2:63 value -33101"
+            ),
+        ],
+    )
+    def test_silently_acknowledged_mqtt_messages(self, device, mqtt_message, description):
+        """Verify silently-acknowledged properties don't generate unhandled_mqtt notifications."""
+        notifications = []
+        device.register_property_callback(lambda name, value: notifications.append((name, value)))
+
+        device._handle_message(mqtt_message)
+
+        unhandled = [name for name, _ in notifications if name == "unhandled_mqtt"]
+        assert unhandled == [], \
+            f"[{description}] Unexpected unhandled_mqtt notification(s): {unhandled}"

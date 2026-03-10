@@ -685,12 +685,10 @@ class DreameMowerDevice:
                 self._notify_property_change(SERVICE2_PROPERTY_62.name, property_value)
                 _LOGGER.debug("Service 2 property 62 updated: %s", property_value)
             elif SERVICE2_PROPERTY_63.matches(siid, piid):
-                # Handle Service 2 property 63 (2:63) - observed in issue #134 during failed firmware download
-                # Value -33001 seen, appears to be an error code. Meaning currently unknown.
-                # Return False to enable crowdsourcing more information about this property
-                property_value = int(message["value"])
-                _LOGGER.warning("Service 2 property 63 value observed: %s (see issue #134)", property_value)
-                return False  # Report false to crowdsource more information
+                # Handle Service 2 property 63 (2:63) - negative integer error/status code (see issue #12)
+                # Observed values: -33101 (mova.mower.g2405a fw 4.3.6_0430), -33001 — meaning unknown.
+                # Silently acknowledge to suppress unhandled MQTT notifications.
+                _LOGGER.debug("Service 2 property 63 received: %s", message.get("value"))
             elif SERVICE2_PROPERTY_54.matches(siid, piid):
                 # Handle Service 2 property 54 (2:54) - meaning unknown, only value seen so far is 100
                 # Silently acknowledge to suppress unhandled MQTT notifications (see issue #25)
