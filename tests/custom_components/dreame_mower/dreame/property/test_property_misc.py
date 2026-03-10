@@ -76,18 +76,17 @@ class TestProperty11Handler:
         assert result is False
 
     def test_parse_value_unknown_sentinels(self):
-        """Test parsing 20-byte array with non-standard sentinel values returns False."""
+        """Test parsing 20-byte arrays with non-standard sentinel values are silently accepted."""
         handler = Property11Handler()
-        
-        # Wrong start sentinel on 20-byte array - unrecognised, return False
+
+        # Non-CE sentinels on 20-byte array (e.g. dreame.swbot.g2509) - silently accepted
         test_data = [100] + [0] * 18 + [206]
         result = handler.parse_value(test_data)
-        assert result is False
-        
-        # Wrong end sentinel on 20-byte array - unrecognised, return False
+        assert result is True
+
         test_data = [206] + [0] * 18 + [100]
         result = handler.parse_value(test_data)
-        assert result is False
+        assert result is True
 
     @patch('custom_components.dreame_mower.dreame.property.property_misc._LOGGER')
     def test_logging_on_invalid_format(self, mock_logger):

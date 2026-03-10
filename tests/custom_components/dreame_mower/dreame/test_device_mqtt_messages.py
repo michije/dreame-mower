@@ -149,6 +149,14 @@ class TestDeviceMqttSilentlyAcknowledged:
                 },
                 "issue #32: 2:55 AI obstacle detection"
             ),
+            (  # 1:1 alt-sentinel 20-byte variant on dreame.swbot.g2509 fw 4.3.6_0603
+                {
+                    "id": 494595,
+                    "method": "properties_changed",
+                    "params": [{"piid": 1, "siid": 1, "value": [1,0,0,0,0,0,0,0,0,229,188,0,0,0,0,0,0,8,91,2]}]
+                },
+                "1:1 20-byte alt-sentinel variant (dreame.swbot.g2509)"
+            ),
         ],
     )
     def test_silently_acknowledged_mqtt_messages(self, device, mqtt_message, description):
