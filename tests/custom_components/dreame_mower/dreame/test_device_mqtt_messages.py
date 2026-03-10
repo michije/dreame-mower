@@ -133,6 +133,22 @@ class TestDeviceMqttSilentlyAcknowledged:
                 },
                 "issue #12: 2:63 value -33101"
             ),
+            (  # Issue #25: 2:54 unknown property, only value seen is 100
+                {
+                    "id": 109,
+                    "method": "properties_changed",
+                    "params": [{"did": "-1******29", "piid": 54, "siid": 2, "value": 100}]
+                },
+                "issue #25: 2:54 value 100"
+            ),
+            (  # Issue #32: 2:55 AI obstacle detection notification
+                {
+                    "id": 110,
+                    "method": "properties_changed",
+                    "params": [{"did": "-1******29", "piid": 55, "siid": 2, "value": {"type": "ai", "obs": [1, 2, 3, 4, 5]}}]
+                },
+                "issue #32: 2:55 AI obstacle detection"
+            ),
         ],
     )
     def test_silently_acknowledged_mqtt_messages(self, device, mqtt_message, description):
