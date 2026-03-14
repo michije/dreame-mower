@@ -11,18 +11,14 @@ from custom_components.dreame_mower.dreame.cloud.cloud_device import DreameMower
 
 def main():
     parser = argparse.ArgumentParser(description="List Dreame devices for your account")
-    parser.add_argument("--username", default=None, help="Cloud username (email)")
-    parser.add_argument("--password", default=None, help="Cloud password")
-    parser.add_argument("--country", default=None, help="Cloud country code (e.g. 'cn', 'eu')")
+    parser.add_argument("--username", default=None, help="Cloud username (email); prompted if omitted")
+    parser.add_argument("--country", default=None, help="Cloud country code (e.g. 'cn', 'eu'); default: eu")
     args = parser.parse_args()
 
-    # Prompt for username, password, country if not provided
     if args.username is None:
-        args.username = input("Enter username (email): ")
-    if args.password is None:
-        args.password = getpass.getpass("Enter password: ")
+        args.username = input("Username (email): ")
+    args.password = getpass.getpass("Password: ")
     if args.country is None:
-        print("No country provided, using default: eu")
         args.country = "eu"
 
     # Create DreameMowerCloudDevice with minimal info

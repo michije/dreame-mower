@@ -32,18 +32,22 @@ Notes:
  - Mission data files are automatically downloaded when event 4:1 occurs.
 
 CLI Examples:
-  .venv/bin/python dev/realtime_monitor.py
-  .venv/bin/python dev/realtime_monitor.py --interval-seconds 90
-  .venv/bin/python dev/realtime_monitor.py --duration-minutes 30
-  .venv/bin/python dev/realtime_monitor.py --no-mqtt
-  .venv/bin/python dev/realtime_monitor.py --no-rest
-  .venv/bin/python dev/realtime_monitor.py --once-rest --no-mqtt
+  # Prompt for credentials interactively (default):
+  python dev/realtime_monitor.py
+  python dev/realtime_monitor.py --username you@example.com --device-id -123456789
+  python dev/realtime_monitor.py --interval-seconds 90
+  python dev/realtime_monitor.py --duration-minutes 30
+
+  # Load credentials from .vscode/launch.json (dev setup shortcut):
+  python dev/realtime_monitor.py --launch-json
+  python dev/realtime_monitor.py --launch-json --no-mqtt
 
 Exit with Ctrl+C.
 """
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import logging
 import os
@@ -248,6 +252,7 @@ class RealtimeMonitor:
         enable_mqtt: bool = True,
         once_rest: bool = False,
         status_interval: int = 1,
+        creds: Dict[str, str] | None = None,
     ) -> None:
         self.interval_seconds = interval_seconds
         self.duration_minutes = duration_minutes
@@ -260,7 +265,7 @@ class RealtimeMonitor:
         self.log_root = log_root or (ROOT_DIR / "dev" / "logs" / self.start_ts)
         self.rest_dir = self.log_root / "rest_api"
         self.mqtt_dir = self.log_root / "mqtt"
-        self._creds: Dict[str, str] | None = None
+        self._creds: Dict[str, str] | None = creds
         self._device: DreameMowerCloudDevice | None = None
         self._rest_thread: threading.Thread | None = None
         self._connected_once = False
@@ -280,7 +285,9 @@ class RealtimeMonitor:
     def load_creds(self):
         if not self._creds:
             self._creds = _load_creds_from_launch()
-            log.info("Loaded credentials for device %s", self._creds["device_id"])
+            log.info("Loaded credentials from launch.json for device %s", self._creds["device_id"])
+        else:
+            log.info("Using provided credentials for device %s", self._creds["device_id"])
         # return credentials for callers
         return self._creds
 
@@ -623,7 +630,17 @@ class RealtimeMonitor:
 # --- CLI ---
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Realtime monitor (REST polling + MQTT logging + mission data download)")
+    p = argparse.ArgumentParser(
+        description="Realtime monitor (REST polling + MQTT logging + mission data download)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Credentials are prompted interactively by default.\n"
+               "Use --launch-json to load credentials from .vscode/launch.json instead.",
+    )
+    cred_group = p.add_mutually_exclusive_group()
+    cred_group.add_argument("--launch-json", action="store_true", help="Load credentials from .vscode/launch.json")
+    cred_group.add_argument("--username", default=None, metavar="EMAIL", help="Dreame account email (prompted if omitted)")
+    p.add_argument("--device-id", default=None, help="Dreame device ID (prompted if omitted; find with list_devices.py)")
+    p.add_argument("--country", default=None, help="Country/region code (default: eu)")
     p.add_argument("--interval-seconds", type=int, default=120, help="REST polling interval (default 120)")
     p.add_argument("--duration-minutes", type=float, default=None, help="Optional total runtime; omit for infinite")
     p.add_argument("--log-root", default=None, help="Optional override for log root directory (default dev/logs/<TS>)")
@@ -634,9 +651,21 @@ def parse_args():
     return p.parse_args()
 
 
+def _resolve_creds(args: argparse.Namespace) -> Dict[str, str]:
+    """Resolve credentials from launch.json or interactive prompts."""
+    if args.launch_json:
+        return _load_creds_from_launch()
+    username = args.username or input("Username (email): ")
+    password = getpass.getpass("Password: ")
+    device_id = args.device_id or input("Device ID (find with list_devices.py): ")
+    country = args.country or "eu"
+    return {"username": username, "password": password, "device_id": device_id, "country": country}
+
+
 def main() -> int:
     args = parse_args()
     log_root = Path(args.log_root) if args.log_root else None
+    creds = _resolve_creds(args)
     monitor = RealtimeMonitor(
         interval_seconds=args.interval_seconds,
         duration_minutes=None if args.once_rest and args.no_mqtt else args.duration_minutes,
@@ -645,6 +674,7 @@ def main() -> int:
         enable_mqtt=(not args.no_mqtt),
         once_rest=args.once_rest,
         status_interval=args.status_interval,
+        creds=creds,
     )
     monitor.run_forever()
     return 0
