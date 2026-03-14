@@ -13,6 +13,7 @@ from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfArea
 
 from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import DreameMowerCoordinator
+from .dreame.const import DeviceStatus
 from .entity import DreameMowerEntity
 from .config_flow import DEVICE_TYPE_SWBOT
 
@@ -187,6 +188,10 @@ class DreameMowerTaskSensor(DreameMowerEntity, SensorEntity):
         task_active = task_data.get("task_active", False)
         
         if task_active and execution_active:
+            # Cross-reference with device status: if mower is returning/charging
+            # during an active task, it's recharging mid-task (not actively mowing)
+            if self.coordinator.device_status_code in (DeviceStatus.RETURNING_TO_CHARGE, DeviceStatus.CHARGING, DeviceStatus.CHARGING_COMPLETE):
+                return "Recharging"
             return "Active"
         elif task_active and not execution_active:
             return "Paused"

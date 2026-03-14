@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from typing import NamedTuple
+from enum import IntEnum
 import logging
 
 from homeassistant.components.lawn_mower import LawnMowerActivity  # type: ignore[attr-defined]
@@ -104,17 +105,31 @@ ACTION_PAUSE = ActionIdentifier(siid=5, aiid=4, name="pause")
 # State progression during charging:
 #   State 5 (returning) → State 6 (active charging, 3:2=1) → State 13 (maintain, 3:2=2)
 #
-STATUS_MAPPING = {
-    0: "no_status",
-    1: "mowing",
-    2: "standby", 
-    3: "paused",
-    4: "paused_due_to_errors",
-    5: "returning_to_station_to_charge",
-    6: "charging",
-    11: "mapping",
-    13: "charging_complete",
-    14: "updating"
+class DeviceStatus(IntEnum):
+    """Device status codes for STATUS_PROPERTY (2:1)."""
+    NO_STATUS = 0
+    MOWING = 1
+    STANDBY = 2
+    PAUSED = 3
+    PAUSED_DUE_TO_ERRORS = 4
+    RETURNING_TO_CHARGE = 5
+    CHARGING = 6
+    MAPPING = 11
+    CHARGING_COMPLETE = 13
+    UPDATING = 14
+
+
+STATUS_MAPPING: dict[int, str] = {
+    DeviceStatus.NO_STATUS: "no_status",
+    DeviceStatus.MOWING: "mowing",
+    DeviceStatus.STANDBY: "standby",
+    DeviceStatus.PAUSED: "paused",
+    DeviceStatus.PAUSED_DUE_TO_ERRORS: "paused_due_to_errors",
+    DeviceStatus.RETURNING_TO_CHARGE: "returning_to_station_to_charge",
+    DeviceStatus.CHARGING: "charging",
+    DeviceStatus.MAPPING: "mapping",
+    DeviceStatus.CHARGING_COMPLETE: "charging_complete",
+    DeviceStatus.UPDATING: "updating"
 }
 
 def map_status_to_activity(status: int) -> LawnMowerActivity:
@@ -123,15 +138,15 @@ def map_status_to_activity(status: int) -> LawnMowerActivity:
     Keep mapping logic colocated with STATUS_MAPPING so behaviour is consistent
     across the integration.
     """
-    if status in [1]:  # Mowing
+    if status in [DeviceStatus.MOWING]:
         return LawnMowerActivity.MOWING
-    elif status in [2, 3]:  # Paused and Standby
+    elif status in [DeviceStatus.STANDBY, DeviceStatus.PAUSED]:
         return LawnMowerActivity.PAUSED
-    elif status in [4]:  # Paused due to errors
+    elif status in [DeviceStatus.PAUSED_DUE_TO_ERRORS]:
         return LawnMowerActivity.ERROR
-    elif status in [5]:  # Returning to station to charge
+    elif status in [DeviceStatus.RETURNING_TO_CHARGE]:
         return LawnMowerActivity.RETURNING
-    elif status in [6, 11, 13, 14]:  # Charging, Mapping, Charging complete, Updating
+    elif status in [DeviceStatus.CHARGING, DeviceStatus.MAPPING, DeviceStatus.CHARGING_COMPLETE, DeviceStatus.UPDATING]:
         return LawnMowerActivity.DOCKED
     else:
         _LOGGER.warning("Unknown status %s, defaulting to DOCKED", status)
