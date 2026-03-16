@@ -157,6 +157,14 @@ class TestDeviceMqttSilentlyAcknowledged:
                 },
                 "1:1 20-byte alt-sentinel variant (dreame.swbot.g2509)"
             ),
+            (  # Issue #38 (also #34, #35): 2:67 4-integer array observed after MOWING_COMPLETED
+                {
+                    "id": 1767,
+                    "method": "properties_changed",
+                    "params": [{"did": "-1******61", "piid": 67, "siid": 2, "value": [0, 0, 0, 0]}]
+                },
+                "issue #38: 2:67 value [0, 0, 0, 0] after MOWING_COMPLETED (mova.mower.g2420a fw 4.3.6_0325)"
+            ),
         ],
     )
     def test_silently_acknowledged_mqtt_messages(self, device, mqtt_message, description):
