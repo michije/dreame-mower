@@ -138,4 +138,5 @@ debug/
 dev/discoveries/
 dev/analyses/
 dev/logs/
+dev/zone_selection/
 tests/custom_components/dreame_mower/dreame/test_data/*_actual.svg
