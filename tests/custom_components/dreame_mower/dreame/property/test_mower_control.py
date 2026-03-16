@@ -8,6 +8,7 @@ from custom_components.dreame_mower.dreame.property.mower_control import (
     MowerControlStatusHandler,
     MowerControlAction,
     MOWER_CONTROL_STATUS_PROPERTY_NAME,
+    CONTROL_ZONES_FIELD,
 )
 
 
@@ -84,6 +85,68 @@ class TestMowerControlStatusHandler:
         assert self.handler.action == MowerControlAction.PAUSE
         assert self.handler.status_code == 4
         assert self.handler.raw_status == [[3, 4]]
+
+    def test_parse_single_zone_active(self):
+        """Test single-zone session: zone 2 actively mowing."""
+        status_data = {'status': [[2, 0]]}
+
+        result = self.handler.parse_value(status_data)
+
+        assert result is True
+        assert self.handler.action == MowerControlAction.CONTINUE
+        assert self.handler.status_code == 0
+        assert self.handler.zone_entries == [[2, 0]]
+
+    def test_parse_single_zone_queued(self):
+        """Test zone queued (status -1) in a multi-zone session."""
+        status_data = {'status': [[1, -1]]}
+
+        result = self.handler.parse_value(status_data)
+
+        assert result is True
+        assert self.handler.action == MowerControlAction.QUEUED
+        assert self.handler.status_code == -1
+        assert self.handler.zone_entries == [[1, -1]]
+
+    def test_parse_two_zone_session_one_active(self):
+        """Test two-zone session: zone 1 queued, zone 3 active (from user 2 logs)."""
+        status_data = {'status': [[1, -1], [3, 0]]}
+
+        result = self.handler.parse_value(status_data)
+
+        assert result is True
+        assert self.handler.action == MowerControlAction.CONTINUE
+        assert self.handler.status_code == 0
+        assert self.handler.zone_entries == [[1, -1], [3, 0]]
+
+    def test_parse_three_zone_session(self):
+        """Test three-zone session: zones 2+3 queued, zone 1 active (from user 2 logs)."""
+        status_data = {'status': [[2, -1], [1, 0], [3, -1]]}
+
+        result = self.handler.parse_value(status_data)
+
+        assert result is True
+        assert self.handler.action == MowerControlAction.CONTINUE
+        assert self.handler.status_code == 0
+        assert self.handler.zone_entries == [[2, -1], [1, 0], [3, -1]]
+
+    def test_parse_zone_session_notification_includes_zones(self):
+        """Test that get_notification_data includes zone entries."""
+        status_data = {'status': [[1, -1], [3, 0]]}
+        self.handler.parse_value(status_data)
+
+        notification = self.handler.get_notification_data()
+
+        assert notification[CONTROL_ZONES_FIELD] == [[1, -1], [3, 0]]
+        assert notification['action'] == 'continue'
+
+    def test_parse_empty_zone_entries_on_empty_status(self):
+        """Test that zone_entries is empty list after empty status."""
+        status_data = {'status': []}
+        self.handler.parse_value(status_data)
+
+        assert self.handler.zone_entries == []
+        assert self.handler.get_notification_data()[CONTROL_ZONES_FIELD] == []
 
     def test_parse_unknown_status_code(self):
         """Test parsing unknown status code returns False."""

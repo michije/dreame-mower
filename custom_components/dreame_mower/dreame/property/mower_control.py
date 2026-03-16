@@ -5,9 +5,13 @@ This module provides parsing and handling for Service 2 mower control properties
 
 The property manages mower operational state changes like pause, continue, and completion commands.
 Supported status codes:
-- 0: Continue operation
-- 2: Completed/Stopped 
-- 4: Pause operation
+- -1: Queued — zone is waiting to be mowed in a multi-zone session
+-  0: Continue / actively mowing
+-  2: Completed/Stopped
+-  4: Pause operation
+
+During zone mowing the status array contains one entry per zone:
+    [[zone_id, status_code], ...]  (e.g. [[1, -1], [3, 0]] = zone 1 queued, zone 3 active)
 """
 
 from __future__ import annotations
@@ -26,13 +30,24 @@ MOWER_CONTROL_STATUS_PROPERTY_NAME = "mower_control_status"
 CONTROL_ACTION_FIELD = "action"
 CONTROL_STATUS_FIELD = "status"
 CONTROL_VALUE_FIELD = "value"
+CONTROL_ZONES_FIELD = "zones"
 
 
 class MowerControlAction(Enum):
     """Mower control action enumeration."""
-    CONTINUE = "continue"
+    QUEUED = "queued"      # zone waiting in a multi-zone session
+    CONTINUE = "continue"  # actively mowing
     PAUSE = "pause"
     COMPLETED = "completed"
+
+
+# Maps raw status codes from piid=56 entries to actions
+_STATUS_CODE_TO_ACTION: dict[int, MowerControlAction] = {
+    -1: MowerControlAction.QUEUED,
+     0: MowerControlAction.CONTINUE,
+     2: MowerControlAction.COMPLETED,
+     4: MowerControlAction.PAUSE,
+}
 
 
 class MowerControlStatusHandler:
@@ -43,6 +58,7 @@ class MowerControlStatusHandler:
         self._action: MowerControlAction | None = None
         self._status_code: int | None = None
         self._raw_status: list[list[int]] | None = None
+        self._zone_entries: list[list[int]] = []
     
     def parse_value(self, value: Any) -> bool:
         """Parse mower control status value."""
@@ -61,45 +77,34 @@ class MowerControlStatusHandler:
             
             self._raw_status = status_array
             
-            # Handle empty status array as valid case (no active control command)
+            # Handle empty status array as valid case (no active zone session)
             if len(status_array) == 0:
                 self._status_code = None
                 self._action = None
+                self._zone_entries = []
                 return True
             
-            # Find the first active entry (skip -1 = zone inactive)
-            # Format: [[zone_id, status_code], ...] - multi-zone arrays report -1 for inactive zones
-            active_entry = None
+            # Validate and collect all entries [[zone_id, status_code], ...]
+            zone_entries: list[list[int]] = []
             for entry in status_array:
                 if not isinstance(entry, list) or len(entry) < 2:
                     raise ValueError(f"Invalid status entry format: {entry}")
-                if int(entry[1]) != -1:
-                    active_entry = entry
-                    break
+                code = int(entry[1])
+                if code not in _STATUS_CODE_TO_ACTION:
+                    _LOGGER.warning(
+                        "Unknown mower control status code: %d in message %s",
+                        code, status_array
+                    )
+                    return False
+                zone_entries.append([entry[0], code])
             
-            if active_entry is None:
-                # All zones inactive
-                self._status_code = None
-                self._action = None
-                return True
+            self._zone_entries = zone_entries
             
-            # Extract status code from second position
-            self._status_code = int(active_entry[1])
+            # Primary action: use the actively-mowing zone (code=0), fall back to first entry
+            primary = next((e for e in zone_entries if e[1] == 0), zone_entries[0])
+            self._status_code = primary[1]
+            self._action = _STATUS_CODE_TO_ACTION[self._status_code]
             
-            # Determine action based on status code
-            if self._status_code == 0:
-                self._action = MowerControlAction.CONTINUE
-            elif self._status_code == 2:
-                self._action = MowerControlAction.COMPLETED
-            elif self._status_code == 4:
-                self._action = MowerControlAction.PAUSE
-            else:
-                # Unknown status code - report as warning
-                _LOGGER.warning(
-                    "Unknown mower control status code: %d in message %s",
-                    self._status_code, self._raw_status
-                )
-                return False            
             return True
             
         except (KeyError, ValueError, TypeError, IndexError) as ex:
@@ -115,6 +120,7 @@ class MowerControlStatusHandler:
             CONTROL_ACTION_FIELD: self._action.value if self._action else None,
             CONTROL_STATUS_FIELD: self._status_code,
             CONTROL_VALUE_FIELD: self._raw_status,
+            CONTROL_ZONES_FIELD: self._zone_entries,
         }
     
     # Properties for direct access
@@ -132,6 +138,11 @@ class MowerControlStatusHandler:
     def raw_status(self) -> list[list[int]] | None:
         """Return raw status array."""
         return self._raw_status
+
+    @property
+    def zone_entries(self) -> list[list[int]]:
+        """Return all zone entries [[zone_id, status_code], ...] from last parse."""
+        return self._zone_entries
     
     @property
     def is_paused(self) -> bool | None:
