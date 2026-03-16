@@ -907,6 +907,64 @@ class DreameMowerDevice:
         self._notify_property_change("activity", "mowing")
         return True
 
+    async def start_mowing_zones(self, zone_ids: list[int]) -> bool:
+        """Start mowing specific zones by their IDs.
+
+        Sends property 2:50 with the selected zone IDs to trigger zone-selective mowing.
+        """
+        if not zone_ids:
+            _LOGGER.error("start_mowing_zones called with empty zone_ids")
+            return False
+
+        task_payload = {
+            "t": "TASK",  # message type discriminator — always "TASK"
+            "d": {
+                "area_id": [],       # spot/area IDs (separate concept from zones) — unused here
+                "exe": True,         # execution flag: True = start
+                "o": 102,            # operation mode: 102 = zone-selective mowing
+                                     # (confirmed by mission data "mode": 102 field)
+                "region_id": zone_ids,  # zone IDs from the vector map to mow
+                "status": True,      # task accepted / active
+                "time": 0,           # cumulative elapsed seconds; device ignores on a new session
+            },
+        }
+
+        try:
+            result = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self._cloud_device.set_property(
+                    SCHEDULING_TASK_PROPERTY.siid,
+                    SCHEDULING_TASK_PROPERTY.piid,
+                    task_payload,
+                ),
+            )
+        except Exception as ex:
+            _LOGGER.error("Failed to send start_mowing_zones command: %s", ex)
+            return False
+
+        if not result:
+            _LOGGER.error("start_mowing_zones command returned falsy result: %s", result)
+            return False
+
+        _LOGGER.info("Zone mowing started for zones: %s", zone_ids)
+        self._pose_coverage_handler.reset_mission_completion()
+        self._notify_property_change("activity", "mowing")
+        return True
+
+    @property
+    def zones(self) -> list[dict]:
+        """Return available mowing zones from the vector map.
+
+        Returns a list of dicts with keys: id, name, area.
+        Returns empty list if vector map is not available.
+        """
+        if self._vector_map is None:
+            return []
+        return [
+            {"id": z.zone_id, "name": z.name, "area": z.area}
+            for z in self._vector_map.zones
+        ]
+
     async def pause(self) -> bool:
         """Pause current operation."""
         if not await asyncio.get_event_loop().run_in_executor(

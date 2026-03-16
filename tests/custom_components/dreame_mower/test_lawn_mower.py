@@ -4,8 +4,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.components.lawn_mower import LawnMowerActivity
+from homeassistant.helpers.service import _validate_entity_service_schema
 
-from custom_components.dreame_mower.lawn_mower import DreameMowerLawnMower
+from custom_components.dreame_mower.lawn_mower import (
+    DreameMowerLawnMower,
+    SERVICE_START_MOWING_ZONES,
+    SERVICE_START_MOWING_ZONES_SCHEMA,
+)
 from custom_components.dreame_mower.dreame.const import STATUS_PROPERTY, DeviceStatus
 
 
@@ -24,6 +29,8 @@ def _make_coordinator(connected=True, status_code=0):
     coordinator.device.start_mowing = AsyncMock(return_value=True)
     coordinator.device.pause = AsyncMock(return_value=True)
     coordinator.device.return_to_dock = AsyncMock(return_value=True)
+    coordinator.selected_zone_id = None
+    coordinator.async_start_mowing_zones = AsyncMock(return_value=True)
     return coordinator
 
 
@@ -102,3 +109,15 @@ async def test_async_dock_calls_device():
     entity = _make_entity()
     await entity.async_dock()
     entity.coordinator.device.return_to_dock.assert_called_once()
+
+
+def test_start_mowing_zones_schema_is_valid_entity_service_schema():
+    """Ensure SERVICE_START_MOWING_ZONES_SCHEMA passes HA's entity-service schema validation.
+
+    HA rejects plain vol.Schema objects for entity services; the schema must be
+    created via cv.make_entity_service_schema so it includes entity-targeting keys.
+    """
+    # Must not raise HomeAssistantError
+    _validate_entity_service_schema(
+        SERVICE_START_MOWING_ZONES_SCHEMA, f"dreame_mower.{SERVICE_START_MOWING_ZONES}"
+    )

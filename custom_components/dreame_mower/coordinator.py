@@ -67,6 +67,9 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         
         # Initialize issue reporter for unhandled MQTT messages
         self.issue_reporter = DreameMowerIssueReporter(hass)
+
+        # Zone selection state — None means "all zones" (default)
+        self._selected_zone_id: int | None = None
         
         # Initialize coordinator with no automatic polling (device will push updates)
         super().__init__(
@@ -241,7 +244,26 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def mowing_path_history(self) -> list[dict[str, Any]]:
         """Return path history for visualization."""
         return self.device.mowing_path_history
-    
+
+    @property
+    def zones(self) -> list[dict]:
+        """Return available mowing zones (id, name, area) from vector map."""
+        return self.device.zones
+
+    @property
+    def selected_zone_id(self) -> int | None:
+        """Return the currently selected zone ID, or None for all zones."""
+        return self._selected_zone_id
+
+    @selected_zone_id.setter
+    def selected_zone_id(self, zone_id: int | None) -> None:
+        """Set the selected zone ID."""
+        self._selected_zone_id = zone_id
+
+    async def async_start_mowing_zones(self, zone_ids: list[int]) -> bool:
+        """Start mowing specific zones by their IDs."""
+        return await self.device.start_mowing_zones(zone_ids)
+
     def _handle_device_update(self, property_name: str, value: Any) -> None:
         """Handle device property updates and notify Home Assistant."""
         # Handle device code error notifications

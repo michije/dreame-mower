@@ -5,9 +5,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.entity_platform import AddEntitiesCallback, async_get_current_platform
 from homeassistant.components.lawn_mower import (  # type: ignore[attr-defined]
     LawnMowerActivity,
     LawnMowerEntity,
@@ -28,6 +31,11 @@ MINIMAL_SUPPORT_FEATURES = (
     | LawnMowerEntityFeature.DOCK
 )
 
+SERVICE_START_MOWING_ZONES = "start_mowing_zones"
+SERVICE_START_MOWING_ZONES_SCHEMA = cv.make_entity_service_schema(
+    {vol.Required("zone_ids"): vol.All(cv.ensure_list, [vol.Coerce(int)])}
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -36,9 +44,16 @@ async def async_setup_entry(
 ) -> None:
     """Set up Dreame Mower lawn mower entity from a config entry."""
     coordinator: DreameMowerCoordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
-    
-    # Create a single lawn mower entity
-    async_add_entities([DreameMowerLawnMower(coordinator)])
+
+    entity = DreameMowerLawnMower(coordinator)
+    async_add_entities([entity])
+
+    platform = async_get_current_platform()
+    platform.async_register_entity_service(
+        SERVICE_START_MOWING_ZONES,
+        SERVICE_START_MOWING_ZONES_SCHEMA,
+        "_async_service_start_mowing_zones",
+    )
 
 
 class DreameMowerLawnMower(DreameMowerEntity, LawnMowerEntity):
@@ -91,12 +106,33 @@ class DreameMowerLawnMower(DreameMowerEntity, LawnMowerEntity):
                 self.schedule_update_ha_state()
 
     async def async_start_mowing(self) -> None:
-        """Start mowing."""
+        """Start mowing, respecting any zone selected in the zone select entity."""
         try:
-            if not await self.coordinator.device.start_mowing():
-                _LOGGER.error("Failed to start mowing")
+            zone_id = self.coordinator.selected_zone_id
+            if zone_id is not None:
+                if not await self.coordinator.async_start_mowing_zones([zone_id]):
+                    _LOGGER.error("Failed to start mowing zone %s", zone_id)
+            else:
+                if not await self.coordinator.device.start_mowing():
+                    _LOGGER.error("Failed to start mowing")
         except Exception as ex:
             _LOGGER.error("Exception while starting mowing: %s", ex)
+
+    async def _async_service_start_mowing_zones(self, zone_ids: list[int]) -> None:
+        """Handle start_mowing_zones service call."""
+        try:
+            if not await self.coordinator.async_start_mowing_zones(zone_ids):
+                _LOGGER.error("Failed to start zone mowing for zones: %s", zone_ids)
+        except Exception as ex:
+            _LOGGER.error("Exception while starting zone mowing: %s", ex)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes including available zones."""
+        zones = self.coordinator.zones
+        if not zones:
+            return {}
+        return {"zones": zones}
 
     async def async_pause(self) -> None:
         """Pause mowing."""
