@@ -68,6 +68,15 @@ class TestDeviceMqttPropertyUpdate:
                 "status",
                 lambda v: v == 13
             ),
+            (  # Issue #37: 2:65 dm::TASK_SLAM_RELOCATE (mova.mower.g2420a fw 4.3.6_0325, observed when mower gets stuck)
+                {
+                    "id": 2068,
+                    "method": "properties_changed",
+                    "params": [{"did": "-1******61", "piid": 65, "siid": 2, "value": "dm::TASK_SLAM_RELOCATE"}]
+                },
+                "service2_property_65",
+                lambda v: v == "dm::TASK_SLAM_RELOCATE"
+            ),
         ],
     )
     def test_full_mqtt_messages_parametrized(
