@@ -77,6 +77,33 @@ class TestDeviceMqttPropertyUpdate:
                 "service2_property_65",
                 lambda v: v == "dm::TASK_SLAM_RELOCATE"
             ),
+            (  # Issue #51: 1:4 11-byte medium format (mova.mower.g2529d fw 4.3.6_0169)
+                {
+                    "id": 244,
+                    "method": "properties_changed",
+                    "params": [{"did": "-1******76", "piid": 4, "siid": 1, "value": [206, 24, 253, 239, 251, 255, 116, 17, 253, 207, 252, 255, 206]}]
+                },
+                "mowing_coordinates",
+                lambda v: v["x"] == -744 and v["y"] == -1041
+            ),
+            (  # Issue #50: 1:4 11-byte medium format (mova.mower.g2529d fw 4.3.6_0169)
+                {
+                    "id": 361,
+                    "method": "properties_changed",
+                    "params": [{"did": "-1******76", "piid": 4, "siid": 1, "value": [206, 152, 1, 224, 7, 0, 123, 149, 1, 192, 7, 0, 206]}]
+                },
+                "mowing_coordinates",
+                lambda v: v["x"] == 408 and v["y"] == 2016
+            ),
+            (  # Issue #49: 1:4 11-byte medium format (mova.mower.g2529d fw 4.3.6_0169)
+                {
+                    "id": 362,
+                    "method": "properties_changed",
+                    "params": [{"did": "-1******76", "piid": 4, "siid": 1, "value": [206, 123, 1, 224, 7, 0, 131, 131, 1, 224, 7, 0, 206]}]
+                },
+                "mowing_coordinates",
+                lambda v: v["x"] == 379 and v["y"] == 2016
+            ),
         ],
     )
     def test_full_mqtt_messages_parametrized(

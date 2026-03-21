@@ -38,6 +38,7 @@ COORDINATES_HEADING_FIELD = "heading"
 # Data format constants
 SENTINEL_BYTE = 206  # 0xCE - frame delimiter
 FULL_PAYLOAD_LENGTH = 31  # Expected payload length for full format
+MEDIUM_PAYLOAD_LENGTH = 11  # Expected payload length for medium format (two coordinate pairs + metadata)
 SHORT_PAYLOAD_LENGTH = 6   # Expected payload length for short format
 
 # Byte positions in payload (0-indexed)
@@ -93,6 +94,8 @@ class PoseCoverageHandler:
             
             if payload_length == FULL_PAYLOAD_LENGTH:
                 return self._parse_full_format(payload)
+            elif payload_length == MEDIUM_PAYLOAD_LENGTH:
+                return self._parse_medium_format(payload)
             elif payload_length == SHORT_PAYLOAD_LENGTH:
                 return self._parse_short_format(payload)
             elif payload_length == 8:
@@ -162,6 +165,25 @@ class PoseCoverageHandler:
             _LOGGER.error("Failed to parse full format pose coverage: %s", ex)
             return False
     
+    def _parse_medium_format(self, payload: List[int]) -> bool:
+        """Parse medium format (11-byte payload) with two coordinate pairs.
+
+        Observed in issues #49, #50, #51 (mova.mower.g2529d fw 4.3.6_0169).
+        Structure: x1(2) + y1(2) + metadata(1) + unknown(1) + x2(2) + y2(2) + metadata(1).
+        We extract the primary x,y from the first pair; the second pair and metadata
+        bytes are not yet fully understood.
+        """
+        try:
+            x = self._read_int16_le(payload, 0)
+            y = self._read_int16_le(payload, 2)
+            self._x_coordinate = x
+            self._y_coordinate = y
+            _LOGGER.debug("Medium pose coverage parsed: x=%d, y=%d (11-byte format)", x, y)
+            return True
+        except Exception as ex:
+            _LOGGER.error("Failed to parse medium format pose coverage: %s", ex)
+            return False
+
     def _parse_short_format(self, payload: List[int]) -> bool:
         """Parse short format (6-byte payload) with limited data."""
         try:
