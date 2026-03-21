@@ -61,6 +61,7 @@ from .const import (
     CHARGING_STATUS_MAPPING,
     TASK_STATUS_PROPERTY,
     FIRMWARE_INSTALL_STATE_MAPPING,
+    SERVICE5_PROPERTY_100,
     SERVICE5_PROPERTY_105,
     SERVICE5_PROPERTY_106,
     SERVICE5_ENERGY_INDEX_PROPERTY,
@@ -640,6 +641,7 @@ class DreameMowerDevice:
                 if old != status_text:
                     self._notify_property_change(CHARGING_STATUS_PROPERTY.name, status_text)
             elif (TASK_STATUS_PROPERTY.matches(siid, piid) or
+                  SERVICE5_PROPERTY_100.matches(siid, piid) or
                   SERVICE5_PROPERTY_105.matches(siid, piid) or 
                   SERVICE5_PROPERTY_106.matches(siid, piid) or 
                   SERVICE5_ENERGY_INDEX_PROPERTY.matches(siid, piid) or

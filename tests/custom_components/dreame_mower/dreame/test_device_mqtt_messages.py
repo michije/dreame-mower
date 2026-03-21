@@ -104,6 +104,15 @@ class TestDeviceMqttPropertyUpdate:
                 "mowing_coordinates",
                 lambda v: v["x"] == 379 and v["y"] == 2016
             ),
+            (  # Issue #44: 5:100 unknown property (dreame.mower.g2568a fw 4.3.6_0212)
+                {
+                    "id": 122,
+                    "method": "properties_changed",
+                    "params": [{"did": "-1******34", "piid": 100, "siid": 5, "value": 5}]
+                },
+                "service5_property_100",
+                lambda v: v["value_100"] == 5
+            ),
         ],
     )
     def test_full_mqtt_messages_parametrized(
