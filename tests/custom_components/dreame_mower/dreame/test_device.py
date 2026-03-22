@@ -3,9 +3,10 @@
 import asyncio
 import pytest
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch, PropertyMock
 
-from custom_components.dreame_mower.dreame.device import DreameMowerDevice
+from custom_components.dreame_mower.dreame.device import DreameMowerDevice, MowingMode
 from custom_components.dreame_mower.dreame.const import DeviceStatus
 
 
@@ -19,7 +20,9 @@ class MockCloudDevice:
         self._disconnected_callback = None
         self.device_id = "test_device_123"  # Add device_id for execute_action method
         self.action_calls = []
+        self.action_result = True
         self.set_property_calls = []
+        self.batch_device_datas_result = None
     
     @property
     def connected(self) -> bool:
@@ -73,8 +76,13 @@ class MockCloudDevice:
     def action(self, siid: int, aiid: int, parameters=None, retry_count: int = 2):
         """Mock action call; return a boolean to indicate success."""
         self.action_calls.append((siid, aiid, parameters, retry_count))
-        # For tests we just return True to indicate success
-        return True
+        if callable(self.action_result):
+            return self.action_result(siid, aiid, parameters, retry_count)
+        return self.action_result
+
+    def get_batch_device_datas(self, props):
+        """Mock batch device data getter used by vector map refresh."""
+        return self.batch_device_datas_result
 
     def execute_action(self, action) -> bool:
         """Mock execute_action method that uses action internally."""
@@ -280,6 +288,245 @@ async def test_start_mowing_zones_rejects_unknown_zone_ids(device):
     assert result is False
     assert len(device._cloud_device.action_calls) == 0
     assert len(device._cloud_device.set_property_calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_start_mowing_edges_uses_edge_action_payload(device):
+    """Edge mowing should use the edge action payload."""
+    device._cloud_device.set_connected_state(True)
+    await device.connect()
+
+    result = await device.start_mowing_edges([[1, 0]])
+
+    assert result is True
+    assert len(device._cloud_device.action_calls) == 1
+
+    siid, aiid, parameters, retry_count = device._cloud_device.action_calls[0]
+    assert (siid, aiid) == (2, 50)
+    assert parameters == [{"m": "a", "p": 0, "o": 101, "d": {"edge": [[1, 0]]}}]
+
+
+@pytest.mark.asyncio
+async def test_start_mowing_edges_rejects_unknown_contour_ids(device):
+    """Edge mowing should reject contour IDs that are not present in the loaded map."""
+    device._cloud_device.set_connected_state(True)
+    await device.connect()
+    device._vector_map = Mock(contours=[Mock(contour_id=(1, 0)), Mock(contour_id=(2, 0))])
+
+    result = await device.start_mowing_edges([[3, 0]])
+
+    assert result is False
+    assert len(device._cloud_device.action_calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_start_mowing_edges_rejects_invalid_contour_shape(device):
+    """Edge mowing should reject contour IDs that are not two-integer pairs."""
+    device._cloud_device.set_connected_state(True)
+    await device.connect()
+
+    result = await device.start_mowing_edges([[1]])
+
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_start_mowing_all_area_uses_map_task_payload(device):
+    """Map-aware all-area mowing should use the verified map task payload."""
+    device._cloud_device.set_connected_state(True)
+    await device.connect()
+    device._vector_map = Mock(available_maps=[Mock(map_id=1), Mock(map_id=2)])
+
+    result = await device.start_mowing_all_area(2)
+
+    assert result is True
+    assert len(device._cloud_device.action_calls) == 1
+    siid, aiid, parameters, retry_count = device._cloud_device.action_calls[0]
+    assert (siid, aiid) == (2, 50)
+    assert parameters == [{"m": "a", "p": 0, "o": 100, "d": {"region_id": [2], "area_id": []}}]
+
+
+@pytest.mark.asyncio
+async def test_set_current_map_uses_verified_map_switch_payload(device):
+    """Map switching should use the verified 2:50 payload with o=200 and idx=mapIndex."""
+    device._cloud_device.set_connected_state(True)
+    await device.connect()
+    device._vector_map = SimpleNamespace(
+        available_maps=[
+            SimpleNamespace(map_id=1, map_index=0, name="Front", total_area=25.0),
+            SimpleNamespace(map_id=2, map_index=1, name="Back", total_area=30.5),
+        ]
+    )
+
+    result = await device.set_current_map(2)
+
+    assert result is True
+    siid, aiid, parameters, retry_count = device._cloud_device.action_calls[0]
+    assert (siid, aiid) == (2, 50)
+    assert parameters == [{"m": "a", "p": 0, "o": 200, "d": {"idx": 1}}]
+    assert device.current_map_id == 2
+
+
+@pytest.mark.asyncio
+async def test_set_current_map_rejects_unknown_map_id(device):
+    """Map switching should reject unknown map IDs when map metadata is loaded."""
+    device._cloud_device.set_connected_state(True)
+    await device.connect()
+    device._vector_map = SimpleNamespace(
+        available_maps=[SimpleNamespace(map_id=1, map_index=0, name="Front", total_area=25.0)]
+    )
+
+    result = await device.set_current_map(2)
+
+    assert result is False
+    assert len(device._cloud_device.action_calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_start_mowing_mode_delegates_to_verified_mode(device):
+    """The mode-oriented API should delegate to the verified zone/edge/all-area flows."""
+    device._cloud_device.set_connected_state(True)
+    await device.connect()
+
+    result = await device.start_mowing_mode(MowingMode.ZONE, zone_ids=[1])
+
+    assert result is True
+    _, _, parameters, _ = device._cloud_device.action_calls[0]
+    assert parameters == [{"m": "a", "p": 0, "o": 102, "d": {"region": [1]}}]
+
+
+@pytest.mark.asyncio
+async def test_start_mowing_mode_rejects_unverified_spot_mode(device):
+    """Spot mode should remain explicitly unsupported until the payload is verified."""
+    device._cloud_device.set_connected_state(True)
+    await device.connect()
+
+    result = await device.start_mowing_mode(
+        MowingMode.SPOT,
+        spot_rectangle={"x1": 1, "y1": 2, "x2": 3, "y2": 4},
+    )
+
+    assert result is False
+    assert len(device._cloud_device.action_calls) == 0
+
+
+def test_current_map_id_is_unknown_for_multi_map_batch_data(device):
+    """Batch map data alone should not invent a current map for multi-map setups."""
+    device._vector_map = SimpleNamespace(
+        current_map_id=None,
+        available_maps=[SimpleNamespace(map_id=1), SimpleNamespace(map_id=2)],
+    )
+    device._scheduling_handler.handle_property_update(
+        2,
+        50,
+        {"t": "TASK", "d": {"area_id": [], "exe": True, "o": 100, "region_id": [2], "status": True, "time": 10}},
+        lambda *_: None,
+    )
+
+    assert device.current_map_id is None
+    assert device.task_target_map_id == 2
+
+
+def test_current_map_id_falls_back_to_only_available_map(device):
+    """Single-map setups can infer the current map without extra cloud state."""
+    device._vector_map = SimpleNamespace(
+        current_map_id=None,
+        available_maps=[SimpleNamespace(map_id=1)],
+    )
+
+    assert device.current_map_id == 1
+
+
+def test_available_maps_returns_serializable_map_entries(device):
+    """Available maps should expose stable dicts for Home Assistant attributes."""
+    device._vector_map = SimpleNamespace(
+        current_map_id=None,
+        available_maps=[
+            SimpleNamespace(map_id=1, map_index=0, name="Front", total_area=25.0),
+            SimpleNamespace(map_id=2, map_index=1, name="Back", total_area=30.5),
+        ]
+    )
+
+    assert device.available_maps == [
+        {"id": 1, "index": 0, "name": "Front", "area": 25.0},
+        {"id": 2, "index": 1, "name": "Back", "area": 30.5},
+    ]
+    assert len(device._cloud_device.action_calls) == 0
+
+
+def test_refresh_current_map_id_reads_active_map_from_mapl(device):
+    """MAPL should authoritatively expose the current map via the isCurMap flag."""
+    property_changes = []
+    device.register_property_callback(lambda name, value: property_changes.append((name, value)))
+    device._vector_map = SimpleNamespace(
+        available_maps=[
+            SimpleNamespace(map_id=1, map_index=0, name="Front", total_area=25.0),
+            SimpleNamespace(map_id=2, map_index=1, name="Back", total_area=30.5),
+        ]
+    )
+    device._cloud_device.action_result = {
+        "siid": 2,
+        "aiid": 50,
+        "code": 0,
+        "out": [{"d": [[0, 0, 1, 1, 0], [1, 1, 1, 1, 0]], "m": "r", "q": 4778, "r": 0}],
+    }
+
+    result = device.refresh_current_map_id()
+
+    assert result is True
+    assert device.current_map_id == 2
+    assert ("current_map_id", 2) in property_changes
+    assert device._cloud_device.action_calls[-1][2] == [{"m": "g", "t": "MAPL"}]
+
+
+def test_fetch_vector_map_updates_current_map_id_from_mapl(device):
+    """Vector map refresh should also refresh current_map_id from MAPL."""
+    device._cloud_device.batch_device_datas_result = {"MAP.info": "2"}
+    device._cloud_device.action_result = {
+        "siid": 2,
+        "aiid": 50,
+        "code": 0,
+        "out": [{"d": [[0, 0, 1, 1, 0], [1, 1, 1, 1, 0]], "m": "r", "q": 4778, "r": 0}],
+    }
+    vector_map = SimpleNamespace(
+        current_map_id=None,
+        zones=[],
+        paths=[],
+        boundary=None,
+        available_maps=[
+            SimpleNamespace(map_id=1, map_index=0, name="Front", total_area=25.0),
+            SimpleNamespace(map_id=2, map_index=1, name="Back", total_area=30.5),
+        ],
+    )
+
+    with patch("custom_components.dreame_mower.dreame.device.parse_batch_map_data", return_value=vector_map):
+        result = device.fetch_vector_map()
+
+    assert result is True
+    assert device.vector_map is vector_map
+    assert device.current_map_id == 2
+
+
+def test_refresh_current_map_id_keeps_existing_value_when_mapl_has_no_active_map(device):
+    """Malformed or incomplete MAPL data should not clear a known current map."""
+    device._current_map_id = 2
+    device._vector_map = SimpleNamespace(
+        available_maps=[
+            SimpleNamespace(map_id=1, map_index=0, name="Front", total_area=25.0),
+            SimpleNamespace(map_id=2, map_index=1, name="Back", total_area=30.5),
+        ]
+    )
+    device._cloud_device.action_result = {
+        "siid": 2,
+        "aiid": 50,
+        "code": 0,
+        "out": [{"d": [[0, 0, 1, 1, 0], [1, 0, 1, 1, 0]], "m": "r", "q": 4778, "r": 0}],
+    }
+
+    result = device.refresh_current_map_id()
+
+    assert result is False
+    assert device.current_map_id == 2
 
 
 @pytest.mark.asyncio

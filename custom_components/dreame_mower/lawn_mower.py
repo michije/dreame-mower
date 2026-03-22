@@ -5,12 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.entity_platform import AddEntitiesCallback, async_get_current_platform
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.components.lawn_mower import (  # type: ignore[attr-defined]
     LawnMowerActivity,
     LawnMowerEntity,
@@ -20,7 +17,7 @@ from homeassistant.components.lawn_mower import (  # type: ignore[attr-defined]
 from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import DreameMowerCoordinator
 from .entity import DreameMowerEntity
-from .dreame.const import STATUS_PROPERTY, STATUS_MAPPING, map_status_to_activity
+from .dreame.const import STATUS_PROPERTY, map_status_to_activity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,12 +27,6 @@ MINIMAL_SUPPORT_FEATURES = (
     | LawnMowerEntityFeature.PAUSE
     | LawnMowerEntityFeature.DOCK
 )
-
-SERVICE_START_MOWING_ZONES = "start_mowing_zones"
-SERVICE_START_MOWING_ZONES_SCHEMA = cv.make_entity_service_schema(
-    {vol.Required("zone_ids"): vol.All(cv.ensure_list, [vol.Coerce(int)])}
-)
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -47,13 +38,6 @@ async def async_setup_entry(
 
     entity = DreameMowerLawnMower(coordinator)
     async_add_entities([entity])
-
-    platform = async_get_current_platform()
-    platform.async_register_entity_service(
-        SERVICE_START_MOWING_ZONES,
-        SERVICE_START_MOWING_ZONES_SCHEMA,
-        "_async_service_start_mowing_zones",
-    )
 
 
 class DreameMowerLawnMower(DreameMowerEntity, LawnMowerEntity):
@@ -106,33 +90,33 @@ class DreameMowerLawnMower(DreameMowerEntity, LawnMowerEntity):
                 self.schedule_update_ha_state()
 
     async def async_start_mowing(self) -> None:
-        """Start mowing, respecting any zone selected in the zone select entity."""
+        """Start mowing using the device's default start command."""
         try:
-            zone_id = self.coordinator.selected_zone_id
-            if zone_id is not None:
-                if not await self.coordinator.async_start_mowing_zones([zone_id]):
-                    _LOGGER.error("Failed to start mowing zone %s", zone_id)
-            else:
-                if not await self.coordinator.device.start_mowing():
-                    _LOGGER.error("Failed to start mowing")
+            if not await self.coordinator.device.start_mowing():
+                _LOGGER.error("Failed to start mowing")
         except Exception as ex:
             _LOGGER.error("Exception while starting mowing: %s", ex)
 
-    async def _async_service_start_mowing_zones(self, zone_ids: list[int]) -> None:
-        """Handle start_mowing_zones service call."""
-        try:
-            if not await self.coordinator.async_start_mowing_zones(zone_ids):
-                _LOGGER.error("Failed to start zone mowing for zones: %s", zone_ids)
-        except Exception as ex:
-            _LOGGER.error("Exception while starting zone mowing: %s", ex)
-
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes including available zones."""
+        """Return extra state attributes including available zones and contours."""
+        attributes: dict[str, Any] = {}
         zones = self.coordinator.zones
-        if not zones:
-            return {}
-        return {"zones": zones}
+        contours = self.coordinator.contours
+        available_maps = self.coordinator.available_maps
+        current_map_id = self.coordinator.current_map_id
+        task_target_map_id = self.coordinator.task_target_map_id
+        if zones:
+            attributes["zones"] = zones
+        if contours:
+            attributes["contours"] = contours
+        if available_maps:
+            attributes["maps"] = available_maps
+        if current_map_id is not None:
+            attributes["current_map_id"] = current_map_id
+        if task_target_map_id is not None:
+            attributes["task_target_map_id"] = task_target_map_id
+        return attributes
 
     async def async_pause(self) -> None:
         """Pause mowing."""

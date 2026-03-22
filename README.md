@@ -18,7 +18,7 @@ Provided "as-is" under the MIT License for personal, non-commercial use with dev
 - **Session Tracking** - Current and previous mowing sessions  
 - **Session History** - Keep track of past mowing activities
 - **Remote Control** - Start, pause, stop, and dock your mower
-- **Zone Selection** - Mow specific zones of your lawn
+- **Map Awareness** - Inspect known maps, zones, contours, and active task metadata
 - **Battery Status** - Current battery level and charging info
 - **Mowing Progress** - Coverage percentage and session duration
 - **Do Not Disturb** - View quiet hours settings
@@ -26,35 +26,21 @@ Provided "as-is" under the MIT License for personal, non-commercial use with dev
 
 *Have suggestions? Check out [Discussions](https://github.com/antondaubert/dreame-mower/discussions)*
 
-## Zone Selection
+## UI Elements
 
-If your map contains multiple named zones you can target individual zones from the HA UI or from automations.
+The current release does not expose map, zone, or edge selection controls in the Home Assistant UI yet.
 
-### UI — Zone Select dropdown
+### TODO: Hierarchical Mowing UI
 
-A **Zone Select** entity is created alongside the mower entity. Use it to pick which zone to mow before pressing Start:
+The intended UI flow is:
 
-1. Open your mower dashboard card (or go to **Settings → Devices & Services → your mower**).
-2. Find the **Zone Select** entity and choose a zone from the dropdown.
-3. Press the normal **Start** button — the mower will mow only the selected zone.
-4. To return to full-lawn mowing, set the dropdown back to **All zones** before pressing Start.
+1. Select the active map.
+2. Pick a mowing scenario: all-area, edge, zone, spot, or manual.
+3. If edge or zone is selected, choose one or more contours or zones.
+4. If spot is selected, define the target rectangle.
+5. Manual control is expected to depend on Bluetooth and remains further out in the roadmap.
 
-> **Note:** Zone names are populated from the device map. If the list is empty wait for the next automatic update.
-
-### Automations — `start_mowing_zones` service
-
-For automations (e.g. "mow the front lawn every Monday") you can call the `dreame_mower.start_mowing_zones` service directly. This also supports mowing **multiple zones in one session**.
-
-```yaml
-service: dreame_mower.start_mowing_zones
-target:
-  entity_id: lawn_mower.my_mower
-data:
-  zone_ids: [2]          # single zone
-  # zone_ids: [1, 3]     # or multiple zones at once
-```
-
-Zone IDs are visible in the mower entity's state attributes (`zones` list) in **Developer Tools → States**, or via the map camera entity after the first map load.
+The device layer already tracks map metadata and verified mowing modes so this UI can be added later without reworking the protocol layer again.
 
 ## Installation
 

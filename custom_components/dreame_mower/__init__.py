@@ -18,7 +18,6 @@ from .config_flow import DEVICE_TYPE_SWBOT
 
 _MOWER_PLATFORMS = (
     Platform.LAWN_MOWER,
-    Platform.SELECT,
     Platform.SENSOR,
     Platform.CAMERA,
 )

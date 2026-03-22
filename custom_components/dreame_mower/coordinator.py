@@ -68,9 +68,6 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Initialize issue reporter for unhandled MQTT messages
         self.issue_reporter = DreameMowerIssueReporter(hass)
 
-        # Zone selection state — None means "all zones" (default)
-        self._selected_zone_id: int | None = None
-        
         # Initialize coordinator with no automatic polling (device will push updates)
         super().__init__(
             hass,
@@ -251,18 +248,24 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self.device.zones
 
     @property
-    def selected_zone_id(self) -> int | None:
-        """Return the currently selected zone ID, or None for all zones."""
-        return self._selected_zone_id
+    def contours(self) -> list[list[int]]:
+        """Return available edge-mowing contour IDs from vector map."""
+        return self.device.contours
 
-    @selected_zone_id.setter
-    def selected_zone_id(self, zone_id: int | None) -> None:
-        """Set the selected zone ID."""
-        self._selected_zone_id = zone_id
+    @property
+    def available_maps(self) -> list[dict[str, Any]]:
+        """Return the maps currently known from vector map data."""
+        return self.device.available_maps
 
-    async def async_start_mowing_zones(self, zone_ids: list[int]) -> bool:
-        """Start mowing specific zones by their IDs."""
-        return await self.device.start_mowing_zones(zone_ids)
+    @property
+    def current_map_id(self) -> int | None:
+        """Return the currently selected map, if known."""
+        return self.device.current_map_id
+
+    @property
+    def task_target_map_id(self) -> int | None:
+        """Return the map targeted by the active task, if known."""
+        return self.device.task_target_map_id
 
     def _handle_device_update(self, property_name: str, value: Any) -> None:
         """Handle device property updates and notify Home Assistant."""

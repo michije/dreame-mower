@@ -10,6 +10,7 @@ TODO: Implement connection retry logic
 from __future__ import annotations
 
 import asyncio
+from enum import Enum
 import logging
 import os
 from typing import Any, Callable
@@ -80,6 +81,16 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class MowingMode(str, Enum):
+    """Mowing modes exposed by the mower task protocol."""
+
+    ALL_AREA = "all_area"
+    EDGE = "edge"
+    ZONE = "zone"
+    SPOT = "spot"
+    MANUAL = "manual"
 
 
 class DreameMowerDevice:
@@ -153,6 +164,7 @@ class DreameMowerDevice:
         
         # Vector map from batch API
         self._vector_map: MowerVectorMap | None = None
+        self._current_map_id: int | None = None
 
         # Property change callbacks
         self._property_callbacks: list[Callable[[str, Any], None]] = []
@@ -342,6 +354,48 @@ class DreameMowerDevice:
         """Return the current vector map data from batch API."""
         return self._vector_map
 
+    @property
+    def available_maps(self) -> list[dict[str, Any]]:
+        """Return map descriptors discovered in batch map data."""
+        if self._vector_map is None:
+            return []
+
+        return [
+            {
+                "id": map_entry.map_id,
+                "index": map_entry.map_index,
+                "name": map_entry.name,
+                "area": map_entry.total_area,
+            }
+            for map_entry in self._vector_map.available_maps
+        ]
+
+    @property
+    def current_map_id(self) -> int | None:
+        """Return the currently selected map, if that state is known."""
+        if self._current_map_id is not None:
+            return self._current_map_id
+
+        if self._vector_map is None:
+            return None
+
+        if self._vector_map.current_map_id is not None:
+            return self._vector_map.current_map_id
+
+        if len(self._vector_map.available_maps) == 1:
+            return self._vector_map.available_maps[0].map_id
+
+        return None
+
+    @property
+    def task_target_map_id(self) -> int | None:
+        """Return the map identifier targeted by the active task, if present."""
+        task_handler = self._scheduling_handler._task_handler
+        if task_handler.region_id:
+            return int(task_handler.region_id[0])
+
+        return None
+
     def fetch_vector_map(self) -> bool:
         """Fetch vector map data from the batch device data API.
 
@@ -366,6 +420,7 @@ class DreameMowerDevice:
                 return False
 
             self._vector_map = vector_map
+            self.refresh_current_map_id()
             _LOGGER.debug(
                 "Vector map updated: %d zones, %d paths, boundary=%s",
                 len(vector_map.zones),
@@ -908,6 +963,154 @@ class DreameMowerDevice:
         self._notify_property_change("activity", "mowing")
         return True
 
+    def supports_mowing_mode(self, mode: MowingMode) -> bool:
+        """Return whether a mowing mode has a outbound command path."""
+        return mode in {
+            MowingMode.ALL_AREA,
+            MowingMode.EDGE,
+            MowingMode.ZONE,
+        }
+
+    def _validate_map_id(self, map_id: int) -> bool:
+        """Return True when the requested map ID exists in the loaded vector map."""
+        if map_id < 1:
+            _LOGGER.error("Map IDs must be positive integers; got: %s", map_id)
+            return False
+
+        if self._vector_map is None:
+            return True
+
+        available_map_ids = {map_entry["id"] for map_entry in self.available_maps}
+        if map_id not in available_map_ids:
+            _LOGGER.error(
+                "Requested unknown map ID %s; available maps: %s",
+                map_id,
+                sorted(available_map_ids),
+            )
+            return False
+
+        return True
+
+    def _map_index_from_id(self, map_id: int) -> int:
+        """Translate the exposed map ID back to the device's map index."""
+        if self._vector_map is not None:
+            for map_entry in self._vector_map.available_maps:
+                if map_entry.map_id == map_id:
+                    return map_entry.map_index
+
+        return map_id - 1
+
+    def _map_id_from_index(self, map_index: int, fallback_position: int | None = None) -> int | None:
+        """Translate a device map index back to the exposed map identifier."""
+        if self._vector_map is not None:
+            for map_entry in self._vector_map.available_maps:
+                if map_entry.map_index == map_index:
+                    return map_entry.map_id
+
+            if fallback_position is not None and 0 <= fallback_position < len(self._vector_map.available_maps):
+                return self._vector_map.available_maps[fallback_position].map_id
+
+        if fallback_position is not None and fallback_position >= 0:
+            return fallback_position + 1
+
+        if map_index >= 0:
+            return map_index + 1
+
+        return None
+
+    def _build_get_map_list_payload(self) -> dict[str, Any]:
+        """Build the 2:50 getter payload for MAPL."""
+        return {
+            "m": "g",
+            "t": "MAPL",
+        }
+
+    def _current_map_id_from_map_list_result(self, result: Any) -> int | None:
+        """Extract the active exposed map ID from a MAPL action response."""
+        if not isinstance(result, dict):
+            return None
+
+        if result.get("code") not in (None, 0):
+            return None
+
+        out_entries = result.get("out")
+        if not isinstance(out_entries, list):
+            return None
+
+        for out_entry in out_entries:
+            if not isinstance(out_entry, dict):
+                continue
+
+            if out_entry.get("r") not in (None, 0):
+                continue
+
+            map_entries = out_entry.get("d")
+            if not isinstance(map_entries, list):
+                continue
+
+            for position, map_entry in enumerate(map_entries):
+                if not isinstance(map_entry, (list, tuple)) or len(map_entry) < 2:
+                    continue
+
+                map_index = map_entry[0]
+                is_current_map = map_entry[1]
+
+                try:
+                    normalized_index = int(map_index)
+                except (TypeError, ValueError):
+                    continue
+
+                if bool(is_current_map):
+                    return self._map_id_from_index(normalized_index, fallback_position=position)
+
+        return None
+
+    def refresh_current_map_id(self) -> bool:
+        """Refresh the current map by querying the MAPL getter."""
+        try:
+            result = self._cloud_device.action(
+                SCHEDULING_TASK_PROPERTY.siid,
+                SCHEDULING_TASK_PROPERTY.piid,
+                [self._build_get_map_list_payload()],
+            )
+        except Exception as ex:
+            _LOGGER.debug("Failed to query MAPL for current map: %s", ex)
+            return False
+
+        current_map_id = self._current_map_id_from_map_list_result(result)
+        if current_map_id is None:
+            _LOGGER.debug("MAPL response did not expose a current map: %s", result)
+            return False
+
+        if self._current_map_id != current_map_id:
+            self._current_map_id = current_map_id
+            self._notify_property_change("current_map_id", current_map_id)
+
+        return True
+
+    def _build_all_area_task_payload(self, map_id: int) -> dict[str, Any]:
+        """Build the 2:50 action payload for map-aware all-area mowing."""
+        return {
+            "m": "a",
+            "p": 0,
+            "o": 100,
+            "d": {
+                "region_id": [map_id],
+                "area_id": [],
+            },
+        }
+
+    def _build_set_current_map_payload(self, map_index: int) -> dict[str, Any]:
+        """Build the 2:50 action payload for switching the active map."""
+        return {
+            "m": "a",
+            "p": 0,
+            "o": 200,
+            "d": {
+                "idx": map_index,
+            },
+        }
+
     def _validate_zone_ids(self, zone_ids: list[int]) -> bool:
         """Return True when all requested zone IDs exist in the loaded map."""
         if self._vector_map is None:
@@ -936,10 +1139,109 @@ class DreameMowerDevice:
             },
         }
 
-    async def _send_zone_task_payload(self, task_payload: dict[str, Any]) -> Any:
-        """Send the zone selection payload via action 2:50."""
+    async def start_mowing_all_area(self, map_id: int | None = None) -> bool:
+        """Start all-area mowing, optionally targeting a specific map identifier."""
+        if map_id is None:
+            return await self.start_mowing()
+
+        if not self._validate_map_id(map_id):
+            return False
+
+        task_payload = self._build_all_area_task_payload(map_id)
+        try:
+            result = await self._send_task_payload("all-area mowing", task_payload)
+        except Exception as ex:
+            _LOGGER.error("Failed to send start_mowing_all_area command: %s", ex)
+            return False
+
+        if not result:
+            _LOGGER.error("start_mowing_all_area command returned falsy result: %s", result)
+            return False
+
+        _LOGGER.info("All-area mowing started for map ID: %s", map_id)
+        self._pose_coverage_handler.reset_mission_completion()
+        self._notify_property_change("activity", "mowing")
+        return True
+
+    async def set_current_map(self, map_id: int) -> bool:
+        """Switch the mower's current map using the map-switch payload."""
+        if not self._validate_map_id(map_id):
+            return False
+
+        map_index = self._map_index_from_id(map_id)
+        task_payload = self._build_set_current_map_payload(map_index)
+        try:
+            result = await self._send_task_payload("map switch", task_payload)
+        except Exception as ex:
+            _LOGGER.error("Failed to send set_current_map command: %s", ex)
+            return False
+
+        if not result:
+            _LOGGER.error("set_current_map command returned falsy result: %s", result)
+            return False
+
+        self._current_map_id = map_id
+        _LOGGER.info("Current map switched to map ID %s (index %s)", map_id, map_index)
+        self._notify_property_change("current_map_id", map_id)
+        return True
+
+    def _validate_contour_ids(self, contour_ids: list[list[int]]) -> bool:
+        """Return True when all requested contour IDs are valid and available."""
+        invalid_contour_ids: list[list[int]] = []
+
+        for contour_id in contour_ids:
+            if len(contour_id) != 2:
+                invalid_contour_ids.append(contour_id)
+                continue
+
+            try:
+                int(contour_id[0])
+                int(contour_id[1])
+            except (TypeError, ValueError):
+                invalid_contour_ids.append(contour_id)
+
+        if invalid_contour_ids:
+            _LOGGER.error(
+                "Contour IDs must be two-integer pairs such as [[1, 0]]; got: %s",
+                invalid_contour_ids,
+            )
+            return False
+
+        if self._vector_map is None:
+            return True
+
+        available_contour_ids = {contour.contour_id for contour in self._vector_map.contours}
+        unknown_contour_ids = [
+            contour_id
+            for contour_id in contour_ids
+            if (contour_id[0], contour_id[1]) not in available_contour_ids
+        ]
+        if unknown_contour_ids:
+            _LOGGER.error(
+                "Requested unknown contour IDs %s; available contours: %s",
+                unknown_contour_ids,
+                [list(contour_id) for contour_id in sorted(available_contour_ids)],
+            )
+            return False
+
+        return True
+
+    def _build_edge_task_payload(self, contour_ids: list[list[int]]) -> dict[str, Any]:
+        """Build the 2:50 action payload for an edge-mowing session."""
+        return {
+            "m": "a",
+            "p": 0,
+            "o": 101,
+            "d": {
+                "edge": contour_ids,
+            },
+        }
+
+    async def _send_task_payload(self, task_name: str, task_payload: dict[str, Any]) -> Any:
+        """Send a scheduling task payload via action 2:50."""
         _LOGGER.debug(
-            "Sending zone mowing action %s:%s with payload: %s",
+            "Sending %s action %s:%s with payload: %s",
+            task_name,
             SCHEDULING_TASK_PROPERTY.siid,
             SCHEDULING_TASK_PROPERTY.piid,
             task_payload,
@@ -954,8 +1256,7 @@ class DreameMowerDevice:
         )
 
     async def start_mowing_zones(self, zone_ids: list[int]) -> bool:
-        """Start mowing specific zones by their IDs.
-        """
+        """Start mowing specific zones by their IDs."""
         if not zone_ids:
             _LOGGER.error("start_mowing_zones called with empty zone_ids")
             return False
@@ -965,7 +1266,7 @@ class DreameMowerDevice:
 
         task_payload = self._build_zone_task_payload(zone_ids)
         try:
-            result = await self._send_zone_task_payload(task_payload)
+            result = await self._send_task_payload("zone mowing", task_payload)
         except Exception as ex:
             _LOGGER.error("Failed to send start_mowing_zones command: %s", ex)
             return False
@@ -978,6 +1279,81 @@ class DreameMowerDevice:
         self._pose_coverage_handler.reset_mission_completion()
         self._notify_property_change("activity", "mowing")
         return True
+
+    async def start_mowing_edges(self, contour_ids: list[list[int]]) -> bool:
+        """Start edge mowing for specific contours.
+
+        Contour IDs are two-integer pairs such as [[1, 0], [2, 0]]. They match
+        entries in the batch map device data under MAP.* -> contours.value, where
+        each contour entry is keyed by an ID pair like [1, 0]. In Home Assistant,
+        these IDs are exposed in the mower entity's contours state attribute after
+        the map has been fetched.
+        """
+        if not contour_ids:
+            _LOGGER.error("start_mowing_edges called with empty contour_ids")
+            return False
+
+        if not self._validate_contour_ids(contour_ids):
+            return False
+
+        task_payload = self._build_edge_task_payload(contour_ids)
+        try:
+            result = await self._send_task_payload("edge mowing", task_payload)
+        except Exception as ex:
+            _LOGGER.error("Failed to send start_mowing_edges command: %s", ex)
+            return False
+
+        if not result:
+            _LOGGER.error("start_mowing_edges command returned falsy result: %s", result)
+            return False
+
+        _LOGGER.info("Edge mowing started for contours: %s", contour_ids)
+        self._pose_coverage_handler.reset_mission_completion()
+        self._notify_property_change("activity", "mowing")
+        return True
+
+    async def start_mowing_mode(
+        self,
+        mode: MowingMode,
+        *,
+        map_id: int | None = None,
+        zone_ids: list[int] | None = None,
+        contour_ids: list[list[int]] | None = None,
+        spot_rectangle: dict[str, int] | None = None,
+    ) -> bool:
+        """Start mowing using an explicit mode-oriented API.
+
+        Spot and manual modes are represented explicitly so higher layers can model
+        the full roadmap, but their outbound command format is still unverified.
+        """
+        if mode == MowingMode.ALL_AREA:
+            return await self.start_mowing_all_area(map_id)
+
+        if mode == MowingMode.ZONE:
+            if not zone_ids:
+                _LOGGER.error("Zone mowing requires at least one zone ID")
+                return False
+            return await self.start_mowing_zones(zone_ids)
+
+        if mode == MowingMode.EDGE:
+            if not contour_ids:
+                _LOGGER.error("Edge mowing requires at least one contour ID")
+                return False
+            return await self.start_mowing_edges(contour_ids)
+
+        if mode == MowingMode.SPOT:
+            _LOGGER.error(
+                "Spot mowing is not implemented yet; rectangle payload format is still unverified: %s",
+                spot_rectangle,
+            )
+            return False
+
+        if mode == MowingMode.MANUAL:
+            _LOGGER.error("Manual mowing is not implemented yet; it appears to require Bluetooth")
+            return False
+
+        _LOGGER.error("Unsupported mowing mode requested: %s", mode)
+        return False
 
     @property
     def zones(self) -> list[dict]:
@@ -992,6 +1368,13 @@ class DreameMowerDevice:
             {"id": z.zone_id, "name": z.name, "area": z.area}
             for z in self._vector_map.zones
         ]
+
+    @property
+    def contours(self) -> list[list[int]]:
+        """Return available edge-mowing contour IDs from the vector map."""
+        if self._vector_map is None:
+            return []
+        return [list(contour.contour_id) for contour in self._vector_map.contours]
 
     async def pause(self) -> bool:
         """Pause current operation."""

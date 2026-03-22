@@ -4,6 +4,8 @@ The batch API returns map data split across numbered keys (MAP.0, MAP.1, ...).
 These chunks must be concatenated in numeric order to form a complete JSON string.
 The JSON contains polygon-based zone boundaries, navigation paths, and metadata.
 """
+from __future__ import annotations
+
 import json
 import logging
 import re
@@ -38,6 +40,25 @@ class MowerPath:
 
 
 @dataclass
+class MowerContour:
+    """A contour entry used for boundary or edge mowing."""
+    contour_id: tuple[int, int]
+    path: list[tuple[int, int]]
+    contour_type: int = 0
+    shape_type: int = 0
+
+
+@dataclass
+class MowerAvailableMap:
+    """A discovered map entry that can be targeted by map-aware mowing tasks."""
+
+    map_id: int
+    map_index: int
+    name: str = ""
+    total_area: float = 0
+
+
+@dataclass
 class MowerMapBoundary:
     """Bounding box for the entire map."""
     x1: int
@@ -67,12 +88,21 @@ class MowerVectorMap:
     zones: list[MowerZone] = field(default_factory=list)
     forbidden_areas: list[MowerZone] = field(default_factory=list)
     paths: list[MowerPath] = field(default_factory=list)
+    contours: list[MowerContour] = field(default_factory=list)
     boundary: MowerMapBoundary | None = None
     total_area: float = 0
     name: str = ""
+    map_id: int = 1
     map_index: int = 0
     mow_paths: list[MowerMowPath] = field(default_factory=list)
+    available_maps: list[MowerAvailableMap] = field(default_factory=list)
+    current_map_id: int | None = None
     last_updated: float | None = None
+
+
+def _map_id_from_index(map_index: int) -> int:
+    """Translate the batch map index into the task-level region identifier."""
+    return map_index + 1
 
 
 def reassemble_map_chunks(batch_data: dict, prefix: str) -> str | None:
@@ -112,6 +142,13 @@ def _parse_polygon_list(data_map: dict) -> list:
 def _extract_path_coords(path_list: list) -> list[tuple[int, int]]:
     """Convert [{"x": ..., "y": ...}, ...] to [(x, y), ...]."""
     return [(p["x"], p["y"]) for p in path_list]
+
+
+def _extract_contour_id(raw_contour_id: list[int] | tuple[int, int]) -> tuple[int, int]:
+    """Convert a contour identifier into a normalized two-integer tuple."""
+    if len(raw_contour_id) != 2:
+        raise ValueError(f"Invalid contour id: {raw_contour_id}")
+    return (int(raw_contour_id[0]), int(raw_contour_id[1]))
 
 
 def parse_mower_map(map_json_str: str) -> MowerVectorMap:
@@ -159,6 +196,16 @@ def parse_mower_map(map_json_str: str) -> MowerVectorMap:
             path_type=path_data.get("type", 0),
         ))
 
+    # Parse contours used by edge mowing
+    for entry in _parse_polygon_list(data.get("contours", {})):
+        contour_id, contour_data = entry[0], entry[1]
+        vmap.contours.append(MowerContour(
+            contour_id=_extract_contour_id(contour_id),
+            path=_extract_path_coords(contour_data.get("path", [])),
+            contour_type=contour_data.get("type", 0),
+            shape_type=contour_data.get("shapeType", 0),
+        ))
+
     # Parse boundary
     boundary = data.get("boundary")
     if boundary:
@@ -170,6 +217,7 @@ def parse_mower_map(map_json_str: str) -> MowerVectorMap:
     vmap.total_area = data.get("totalArea", 0)
     vmap.name = data.get("name", "")
     vmap.map_index = data.get("mapIndex", 0)
+    vmap.map_id = _map_id_from_index(vmap.map_index)
     vmap.last_updated = time.time()
 
     return vmap
@@ -369,17 +417,15 @@ def parse_batch_map_data(batch_data: dict) -> MowerVectorMap | None:
         _LOGGER.warning("No valid MAP arrays found in batch data")
         return None
 
-    # Parse each map entry — they're JSON strings within the array
-    primary_map = None
+    parsed_maps: list[MowerVectorMap] = []
     for map_json_str in map_arrays:
         try:
-            vmap = parse_mower_map(map_json_str)
-            if vmap.map_index == 0:
-                primary_map = vmap
+            parsed_maps.append(parse_mower_map(map_json_str))
         except (json.JSONDecodeError, KeyError, TypeError) as ex:
             _LOGGER.warning("Failed to parse map entry: %s", ex)
             continue
 
+    primary_map = next((vmap for vmap in parsed_maps if vmap.map_index == 0), None)
     if primary_map is None and map_arrays:
         try:
             primary_map = parse_mower_map(map_arrays[0])
@@ -390,6 +436,15 @@ def parse_batch_map_data(batch_data: dict) -> MowerVectorMap | None:
     if primary_map is None:
         return None
 
+    primary_map.available_maps = [
+        MowerAvailableMap(
+            map_id=vmap.map_id,
+            map_index=vmap.map_index,
+            name=vmap.name,
+            total_area=vmap.total_area,
+        )
+        for vmap in sorted(parsed_maps, key=lambda item: item.map_id)
+    ]
     # Attach mowing paths
     primary_map.mow_paths = parse_mow_paths(batch_data)
 

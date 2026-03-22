@@ -111,6 +111,21 @@ def test_parse_mower_map_forbidden_area():
     assert result.forbidden_areas[0].zone_id == 2
 
 
+def test_parse_mower_map_contours():
+    map_json = _make_map_json(
+        contours={
+            "dataType": "Map",
+            "value": [
+                [[1, 0], {"path": [{"x": 5, "y": 6}], "type": 7, "shapeType": 0}],
+            ],
+        }
+    )
+    result = parse_mower_map(map_json)
+    assert len(result.contours) == 1
+    assert result.contours[0].contour_id == (1, 0)
+    assert result.contours[0].path == [(5, 6)]
+
+
 # ---------------------------------------------------------------------------
 # parse_mow_paths
 # ---------------------------------------------------------------------------
@@ -180,3 +195,33 @@ def test_parse_batch_map_data_attaches_mow_paths():
     result = parse_batch_map_data(batch)
     assert result is not None
     assert len(result.mow_paths) == 1
+
+
+def test_parse_batch_map_data_tracks_available_maps_and_active_map():
+    first_map = {
+        "mapIndex": 0,
+        "name": "Front",
+        "totalArea": 42.0,
+        "mowingAreas": {"dataType": "Map", "value": []},
+        "forbiddenAreas": {"dataType": "Map", "value": []},
+        "paths": {"dataType": "Map", "value": []},
+    }
+    second_map = {
+        "mapIndex": 1,
+        "name": "Back",
+        "totalArea": 21.0,
+        "mowingAreas": {"dataType": "Map", "value": []},
+        "forbiddenAreas": {"dataType": "Map", "value": []},
+        "paths": {"dataType": "Map", "value": []},
+    }
+    chunk = json.dumps([json.dumps(first_map), json.dumps(second_map)])
+
+    result = parse_batch_map_data({"MAP.0": chunk})
+
+    assert result is not None
+    assert result.map_id == 1
+    assert result.current_map_id is None
+    assert [(entry.map_id, entry.map_index, entry.name) for entry in result.available_maps] == [
+        (1, 0, "Front"),
+        (2, 1, "Back"),
+    ]
