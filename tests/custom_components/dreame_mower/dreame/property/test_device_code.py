@@ -68,9 +68,9 @@ class TestDeviceCodeRegistry:
         # Test existing code
         definition = registry.get_code(28)
         assert definition is not None
-        assert definition.name == "BLADES_SEVERELY_WORN"
-        assert definition.description == "Blades are severely worn. Replace them soon."
-        assert definition.code_type == DeviceCodeType.WARNING
+        assert definition.name == "BLADE_LOSS"
+        assert definition.description == "Blades lost or worn out"
+        assert definition.code_type == DeviceCodeType.ERROR
         
         # Test non-existing code
         assert registry.get_code(999) is None
@@ -80,8 +80,8 @@ class TestDeviceCodeRegistry:
         registry = DeviceCodeRegistry(BASE_DEVICE_CODES)
         
         # Test existing code
-        assert registry.get_name(28) == "BLADES_SEVERELY_WORN"
-        assert registry.get_description(28) == "Blades are severely worn. Replace them soon."
+        assert registry.get_name(28) == "BLADE_LOSS"
+        assert registry.get_description(28) == "Blades lost or worn out"
         
         # Test unknown code fallbacks
         assert registry.get_name(999) == "Unknown Code 999"
@@ -89,8 +89,8 @@ class TestDeviceCodeRegistry:
 
     @pytest.mark.parametrize("code,expected_error,expected_warning,expected_info", [
         (2, True, False, False),    # MOWER_GOT_STUCK (error)
-        (28, False, True, False),   # BLADES_SEVERELY_WORN (warning)
-        (48, False, False, True),   # MOWING_COMPLETED (info)
+        (28, True, False, False),   # BLADE_LOSS (error)
+        (48, False, False, True),   # TASK_FINISH (info)
         (999, False, False, False), # Unknown code
     ])
     def test_type_checking_methods(self, code, expected_error, expected_warning, expected_info):
@@ -148,8 +148,8 @@ class TestDeviceCodeHandler:
         assert handler.device_code_is_warning is None
 
     @pytest.mark.parametrize("input_value,expected_success,expected_code,expected_name,expected_error,expected_warning", [
-        (28, True, 28, "BLADES_SEVERELY_WORN", False, True),  # Valid known code
-        ("28", True, 28, "BLADES_SEVERELY_WORN", False, True), # String number
+        (28, True, 28, "BLADE_LOSS", True, False),  # Valid known code
+        ("28", True, 28, "BLADE_LOSS", True, False), # String number
         (999, True, 999, "Unknown Code 999", False, False),    # Unknown code
         ("invalid", False, None, None, None, None),           # Invalid type
     ])
@@ -178,8 +178,8 @@ class TestDeviceCodeHandler:
         assert NOTIFICATION_TIMESTAMP_FIELD in notification_data
         
         assert notification_data[NOTIFICATION_CODE_FIELD] == 28
-        assert notification_data[NOTIFICATION_NAME_FIELD] == "BLADES_SEVERELY_WORN"
-        assert notification_data[NOTIFICATION_DESCRIPTION_FIELD] == "Blades are severely worn. Replace them soon."
+        assert notification_data[NOTIFICATION_NAME_FIELD] == "BLADE_LOSS"
+        assert notification_data[NOTIFICATION_DESCRIPTION_FIELD] == "Blades lost or worn out"
 
     def test_set_model(self):
         """Test changing device model."""
@@ -200,18 +200,28 @@ class TestDeviceCodeRegistries:
 
     def test_base_device_codes_coverage(self):
         """Test that key base device codes are present."""
-        assert 28 in BASE_DEVICE_CODES   # New blade wear code
+        assert 28 in BASE_DEVICE_CODES   # Blade loss code
+        assert 32 in BASE_DEVICE_CODES   # Shared docking failure code
+        assert 38 in BASE_DEVICE_CODES   # Shared LiDAR dirty warning
         
-        # Verify the new code 28
+        # Verify code 28
         blade_code = BASE_DEVICE_CODES[28]
-        assert blade_code.name == "BLADES_SEVERELY_WORN"
-        assert blade_code.code_type == DeviceCodeType.WARNING
+        assert blade_code.name == "BLADE_LOSS"
+        assert blade_code.code_type == DeviceCodeType.ERROR
+
+        docking_code = BASE_DEVICE_CODES[32]
+        assert docking_code.name == "DOCKING_FAILED"
+        assert docking_code.code_type == DeviceCodeType.WARNING
+
+        lidar_dirty_code = BASE_DEVICE_CODES[38]
+        assert lidar_dirty_code.name == "LIDAR_DIRTY"
+        assert lidar_dirty_code.code_type == DeviceCodeType.WARNING
 
     @pytest.mark.parametrize("model,expected_code_0_name,expected_code_28_name", [
-        (None, "NO_DEVICE_CODE", "BLADES_SEVERELY_WORN"),                    # Base registry
-        ("dreame.mower.p2255", "NO_DEVICE_CODE", "BLADES_SEVERELY_WORN"),     # A1 registry
-        ("mova.mower.g2405b", "ROBOT_LIFTED", "BLADES_SEVERELY_WORN"),       # MOVA registry
-        ("unknown.model", "NO_DEVICE_CODE", "BLADES_SEVERELY_WORN"),         # Unknown model
+        (None, "NO_DEVICE_CODE", "BLADE_LOSS"),                    # Base registry
+        ("dreame.mower.p2255", "NO_DEVICE_CODE", "BLADE_LOSS"),     # A1 registry
+        ("mova.mower.g2405b", "ROBOT_LIFTED", "BLADE_LOSS"),       # MOVA registry
+        ("unknown.model", "NO_DEVICE_CODE", "BLADE_LOSS"),         # Unknown model
     ])
     def test_get_device_code_registry(self, model, expected_code_0_name, expected_code_28_name):
         """Test getting registries for different models."""
@@ -223,25 +233,36 @@ class TestDeviceCodeRegistries:
         # Code 0 varies by model
         assert registry.get_name(0) == expected_code_0_name
 
+    def test_code_19_base_vs_a1_override(self):
+        """Code 19 should stay as lost in base and map to emergency stop on A1."""
+        base_registry = get_device_code_registry(None)
+        a1_registry = get_device_code_registry("dreame.mower.p2255")
 
-class TestNewBladeWearCode:
-    """Specific tests for the new blade wear code 28."""
+        assert base_registry.get_name(19) == "LOCATION_LOST"
+        assert base_registry.get_description(19) == "Robot is lost"
+
+        assert a1_registry.get_name(19) == "EMERGENCY_STOP_PRESSED"
+        assert a1_registry.get_description(19) == "Emergency stop pressed"
+
+
+class TestBladeLossCode:
+    """Specific tests for the blade loss code 28."""
 
     def test_blade_wear_code_properties(self):
-        """Test the new blade wear code 28 properties and availability across all registries."""
+        """Test code 28 properties and availability across all registries."""
         handler = DeviceCodeHandler()
         handler.parse_value(28)
         
         assert handler.device_code == 28
-        assert handler.device_code_name == "BLADES_SEVERELY_WORN"
-        assert handler.device_code_description == "Blades are severely worn. Replace them soon."
-        assert handler.device_code_is_warning is True
-        assert handler.device_code_is_error is False
+        assert handler.device_code_name == "BLADE_LOSS"
+        assert handler.device_code_description == "Blades lost or worn out"
+        assert handler.device_code_is_warning is False
+        assert handler.device_code_is_error is True
         
         # Verify available in all model registries
         for model in [None, "dreame.mower.p2255", "mova.mower.g2405b"]:
             registry = get_device_code_registry(model)
-            assert registry.get_name(28) == "BLADES_SEVERELY_WORN"
+            assert registry.get_name(28) == "BLADE_LOSS"
 
 
 class TestMovaDriveWheelCodes:
@@ -261,6 +282,7 @@ class TestMovaDriveWheelCodes:
         assert defn.is_error() is True
 
     @pytest.mark.parametrize("model,code,expected_name", [
+        ("mova.mower.g2405a", 4, "LEFT_DRIVE_WHEEL_ERROR"),
         ("mova.mower.g2405b", 4, "LEFT_DRIVE_WHEEL_ERROR"),
         ("mova.mower.g2405c", 4, "LEFT_DRIVE_WHEEL_ERROR"),
         ("mova.mower.g2529b", 4, "LEFT_DRIVE_WHEEL_ERROR"),
@@ -273,11 +295,14 @@ class TestMovaDriveWheelCodes:
         assert registry.get_name(code) == expected_name
         assert registry.is_error(code) is True
 
-    @pytest.mark.parametrize("code", [4, 5])
-    def test_codes_not_in_base_registry(self, code):
-        """Codes 4 and 5 should not be in the base or A1 registry."""
-        assert get_device_code_registry(None).get_code(code) is None
-        assert get_device_code_registry("dreame.mower.p2255").get_code(code) is None
+    @pytest.mark.parametrize("code,expected_name", [
+        (4, "LEFT_WHEEL"),
+        (5, "RIGHT_WHEEL"),
+    ])
+    def test_codes_are_now_shared_with_base_registry(self, code, expected_name):
+        """Codes 4 and 5 are shared across multiple families and should resolve in the base registry."""
+        assert get_device_code_registry(None).get_name(code) == expected_name
+        assert get_device_code_registry("dreame.mower.p2255").get_name(code) == expected_name
 
     @pytest.mark.parametrize("code,expected_name", [
         (4, "LEFT_DRIVE_WHEEL_ERROR"),
@@ -291,3 +316,23 @@ class TestMovaDriveWheelCodes:
         assert handler.device_code_name == expected_name
         assert handler.device_code_is_error is True
         assert handler.device_code_is_warning is False
+
+
+class TestSharedDeviceCodes:
+    """Tests for shared device codes available in the base registry."""
+
+    @pytest.mark.parametrize("code,expected_name,expected_error,expected_warning", [
+        (7, "CUTTER", True, False),
+        (25, "MAP_FILE_CRACK", True, False),
+        (32, "DOCKING_FAILED", False, True),
+        (38, "LIDAR_DIRTY", False, True),
+        (69, "STATION_NOT_CONNECTED_TO_WORKING_AREA", False, False),
+    ])
+    def test_shared_codes_resolve_in_base_registry(self, code, expected_name, expected_error, expected_warning):
+        """Shared fault codes should resolve without model-specific overrides."""
+        handler = DeviceCodeHandler()
+
+        assert handler.parse_value(code) is True
+        assert handler.device_code_name == expected_name
+        assert handler.device_code_is_error is expected_error
+        assert handler.device_code_is_warning is expected_warning
