@@ -2,6 +2,7 @@
 
 This module provides parsing and handling for Service 5 properties:
 - 5:100 - Unknown property (discovered in issue #44)
+- 5:101 - Unknown property, observed value: "success" (issue #56)
 - 5:104 - Task status (task completion status codes)
 - 5:105 - Unknown property (possible capability/feature flag)
 - 5:106 - BMS charging micro-phases (fine-grained charging state)
@@ -16,7 +17,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, Any
 from enum import Enum
-from ..const import TASK_STATUS_PROPERTY, SERVICE5_PROPERTY_100, SERVICE5_PROPERTY_105, SERVICE5_PROPERTY_106, SERVICE5_ENERGY_INDEX_PROPERTY, SERVICE5_PROPERTY_108
+from ..const import TASK_STATUS_PROPERTY, SERVICE5_PROPERTY_100, SERVICE5_PROPERTY_101, SERVICE5_PROPERTY_105, SERVICE5_PROPERTY_106, SERVICE5_ENERGY_INDEX_PROPERTY, SERVICE5_PROPERTY_108
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,6 +88,12 @@ class Service5PropertyHandler:
             # Handle property 5:100 (discovered in issue #44)
             if SERVICE5_PROPERTY_100.matches(siid, piid):
                 return self._handle_property_100(value, notify_callback)
+
+            # Handle property 5:101 (discovered in issue #56)
+            elif SERVICE5_PROPERTY_101.matches(siid, piid):
+                # Meaning unknown; only observed value is "success". Silently acknowledge.
+                _LOGGER.debug("Service 5 property 101 received: %s", value)
+                return True
 
             # Handle task status property (5:104)
             elif TASK_STATUS_PROPERTY.matches(siid, piid):

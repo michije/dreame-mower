@@ -65,6 +65,7 @@ from .const import (
     TASK_STATUS_PROPERTY,
     FIRMWARE_INSTALL_STATE_MAPPING,
     SERVICE5_PROPERTY_100,
+    SERVICE5_PROPERTY_101,
     SERVICE5_PROPERTY_105,
     SERVICE5_PROPERTY_106,
     SERVICE5_ENERGY_INDEX_PROPERTY,
@@ -700,11 +701,12 @@ class DreameMowerDevice:
                     self._notify_property_change(CHARGING_STATUS_PROPERTY.name, status_text)
             elif (TASK_STATUS_PROPERTY.matches(siid, piid) or
                   SERVICE5_PROPERTY_100.matches(siid, piid) or
+                  SERVICE5_PROPERTY_101.matches(siid, piid) or
                   SERVICE5_PROPERTY_105.matches(siid, piid) or 
                   SERVICE5_PROPERTY_106.matches(siid, piid) or 
                   SERVICE5_ENERGY_INDEX_PROPERTY.matches(siid, piid) or
                   SERVICE5_PROPERTY_108.matches(siid, piid)):
-                # Handle all Service 5 properties (5:104, 5:105, 5:106, 5:107, 5:108) in unified handler
+                # Handle all Service 5 properties (5:100, 5:101, 5:104, 5:105, 5:106, 5:107, 5:108) in unified handler
                 if not self._service5_handler.handle_property_update(siid, piid, message["value"], self._notify_property_change):
                     return False  # Parsing failed - treat as unhandled property
             elif DEVICE_CODE_PROPERTY.matches(siid, piid):
