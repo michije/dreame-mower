@@ -86,7 +86,8 @@
           "charging": "Зарядка",
           "not_charging": "Не заряджається",
           "charging_completed": "Зарядка завершена",
-          "return_to_charge": "Повернення до заряду"
+          "return_to_charge": "Повернення до заряду",
+          "charging_paused_low_temperature": "Зарядка призупинена: температура акумулятора занадто низька"
         }
       },
       "mowing_progress": {

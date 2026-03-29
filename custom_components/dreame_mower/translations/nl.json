@@ -86,7 +86,8 @@
           "charging": "Laad-",
           "not_charging": "Niet opladen",
           "charging_completed": "Opladen voltooid",
-          "return_to_charge": "Keer terug naar de kosten"
+          "return_to_charge": "Keer terug naar de kosten",
+          "charging_paused_low_temperature": "Opladen gepauzeerd: batterijtemperatuur te laag"
         }
       },
       "mowing_progress": {

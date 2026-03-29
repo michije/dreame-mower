@@ -86,7 +86,8 @@
           "charging": "Wird geladen",
           "not_charging": "Wird nicht aufgeladen",
           "charging_completed": "Vollständig geladen",
-          "return_to_charge": "Rückkehr zum Laden"
+          "return_to_charge": "Rückkehr zum Laden",
+          "charging_paused_low_temperature": "Laden pausiert: Batterietemperatur zu niedrig"
         }
       },
       "mowing_progress": {

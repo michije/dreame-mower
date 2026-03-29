@@ -86,7 +86,8 @@
           "charging": "Töltés",
           "not_charging": "Nem töltés",
           "charging_completed": "A töltés befejeződött",
-          "return_to_charge": "Visszatérés a töltéshez"
+          "return_to_charge": "Visszatérés a töltéshez",
+          "charging_paused_low_temperature": "Töltés szüneteltetve: az akkumulátor hőmérséklete túl alacsony"
         }
       },
       "mowing_progress": {

@@ -131,6 +131,15 @@ class TestDeviceMqttPropertyUpdate:
                 "mower_control_status",
                 lambda v: v["action"] == "continue" and v["status"] == 0
             ),
+            (  # Issue #40: 3:2 charging status 16 = charging paused low temperature (mova.mower.g2529b)
+                {
+                    "id": 200,
+                    "method": "properties_changed",
+                    "params": [{"did": "-1******54", "piid": 2, "siid": 3, "value": 16}]
+                },
+                "charging_status",
+                lambda v: v == "charging_paused_low_temperature"
+            ),
         ],
     )
     def test_full_mqtt_messages_parametrized(
@@ -243,6 +252,14 @@ class TestDeviceMqttSilentlyAcknowledged:
                     "params": [{"did": "-1******76", "piid": 66, "siid": 2, "value": [97, 220]}]
                 },
                 "issue #48: 2:66 value [97, 220] (mova.mower.g2529d fw 4.3.6_0169)"
+            ),
+            (  # Issue #52: 2:53 unknown property, only value seen is 100 (mova.mower.g2405a)
+                {
+                    "id": 981,
+                    "method": "properties_changed",
+                    "params": [{"did": "-1******45", "piid": 53, "siid": 2, "value": 100}]
+                },
+                "issue #52: 2:53 value 100 (mova.mower.g2405a fw 4.3.6_0450)"
             ),
         ],
     )

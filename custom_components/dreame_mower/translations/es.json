@@ -86,7 +86,8 @@
           "charging": "Carga",
           "not_charging": "No cargando",
           "charging_completed": "Carga completada",
-          "return_to_charge": "Volver al cargo"
+          "return_to_charge": "Volver al cargo",
+          "charging_paused_low_temperature": "Carga pausada: temperatura de batería demasiado baja"
         }
       },
       "mowing_progress": {

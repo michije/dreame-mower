@@ -86,7 +86,8 @@
           "charging": "Ładowanie",
           "not_charging": "Nie ładować",
           "charging_completed": "Ładowanie zakończone",
-          "return_to_charge": "Powrót do opłaty"
+          "return_to_charge": "Powrót do opłaty",
+          "charging_paused_low_temperature": "Ładowanie wstrzymane: temperatura baterii zbyt niska"
         }
       },
       "mowing_progress": {

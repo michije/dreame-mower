@@ -163,6 +163,7 @@ CHARGING_STATUS_MAPPING: dict[int, str] = {
     2: "not_charging",
     3: "charging_completed",
     5: "return_to_charge",
+    16: "charging_paused_low_temperature",  # Charging paused: battery temperature too low (issue #40)
 }
 
 # Firmware install state mapping for FIRMWARE_INSTALL_STATE_PROPERTY
