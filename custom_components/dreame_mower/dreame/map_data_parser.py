@@ -110,6 +110,7 @@ class MowerVectorMap:
     available_maps: list[MowerAvailableMap] = field(default_factory=list)
     current_map_id: int | None = None
     last_updated: float | None = None
+    maps: dict[int, MowerVectorMap] = field(default_factory=dict, repr=False)
 
 
 def _map_id_from_index(map_index: int) -> int:
@@ -156,8 +157,14 @@ def _extract_path_coords(path_list: list) -> list[tuple[int, int]]:
     return [(p["x"], p["y"]) for p in path_list]
 
 
-def _extract_contour_id(raw_contour_id: list[int] | tuple[int, int]) -> tuple[int, int]:
+def _extract_contour_id(raw_contour_id: str | list[int] | tuple[int, int]) -> tuple[int, int]:
     """Convert a contour identifier into a normalized two-integer tuple."""
+    if isinstance(raw_contour_id, str):
+        parts = [part.strip() for part in raw_contour_id.split(",")]
+        if len(parts) != 2:
+            raise ValueError(f"Invalid contour id: {raw_contour_id}")
+        return (int(parts[0]), int(parts[1]))
+
     if len(raw_contour_id) != 2:
         raise ValueError(f"Invalid contour id: {raw_contour_id}")
     return (int(raw_contour_id[0]), int(raw_contour_id[1]))
@@ -393,14 +400,14 @@ def parse_batch_map_data(batch_data: dict) -> MowerVectorMap | None:
     This is the main entry point. It:
     1. Reassembles MAP.* chunks into a full JSON string
     2. Parses the JSON array (may contain multiple maps by mapIndex)
-    3. Returns the primary map (mapIndex 0)
+    3. Keeps all parsed maps and returns the primary map (mapIndex 0) as the fallback/root entry
     4. Attaches mowing paths from M_PATH.* keys
 
     Args:
         batch_data: Full response dict from get_batch_device_datas
 
     Returns:
-        MowerVectorMap for the primary map, or None if parsing fails.
+        MowerVectorMap for the primary map, with all parsed maps attached for active-map resolution.
     """
     if not batch_data:
         return None
@@ -459,7 +466,7 @@ def parse_batch_map_data(batch_data: dict) -> MowerVectorMap | None:
     if primary_map is None:
         return None
 
-    primary_map.available_maps = [
+    available_maps = [
         MowerAvailableMap(
             map_id=vmap.map_id,
             map_index=vmap.map_index,
@@ -468,7 +475,16 @@ def parse_batch_map_data(batch_data: dict) -> MowerVectorMap | None:
         )
         for vmap in sorted(parsed_maps, key=lambda item: item.map_id)
     ]
-    # Attach mowing paths
-    primary_map.mow_paths = parse_mow_paths(batch_data)
+
+    mow_paths = parse_mow_paths(batch_data)
+    parsed_maps_by_id = {vmap.map_id: vmap for vmap in parsed_maps}
+
+    for vmap in parsed_maps_by_id.values():
+        vmap.available_maps = available_maps
+        vmap.mow_paths = mow_paths
+
+    primary_map.available_maps = available_maps
+    primary_map.mow_paths = mow_paths
+    primary_map.maps = parsed_maps_by_id
 
     return primary_map

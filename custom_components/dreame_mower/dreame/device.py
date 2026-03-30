@@ -353,10 +353,29 @@ class DreameMowerDevice:
         """Return path history for visualization."""
         return self._pose_coverage_handler.path_history
 
+    def _resolved_vector_map(self) -> MowerVectorMap | None:
+        """Return the geometry for the active map when multi-map batch data is available."""
+        if self._vector_map is None:
+            return None
+
+        parsed_maps = getattr(self._vector_map, "maps", {})
+        if not isinstance(parsed_maps, dict):
+            return self._vector_map
+
+        map_id = self.current_map_id
+        if map_id is not None and map_id in parsed_maps:
+            return parsed_maps[map_id]
+
+        fallback_map_id = getattr(self._vector_map, "map_id", None)
+        if isinstance(fallback_map_id, int) and fallback_map_id in parsed_maps:
+            return parsed_maps[fallback_map_id]
+
+        return self._vector_map
+
     @property
     def vector_map(self) -> MowerVectorMap | None:
         """Return the current vector map data from batch API."""
-        return self._vector_map
+        return self._resolved_vector_map()
 
     @property
     def available_maps(self) -> list[dict[str, Any]]:
@@ -383,11 +402,15 @@ class DreameMowerDevice:
         if self._vector_map is None:
             return None
 
-        if self._vector_map.current_map_id is not None:
-            return self._vector_map.current_map_id
+        vector_map_current_id = getattr(self._vector_map, "current_map_id", None)
+        if isinstance(vector_map_current_id, int) and not isinstance(vector_map_current_id, bool):
+            return vector_map_current_id
 
-        if len(self._vector_map.available_maps) == 1:
-            return self._vector_map.available_maps[0].map_id
+        available_maps = getattr(self._vector_map, "available_maps", None)
+        if isinstance(available_maps, list) and len(available_maps) == 1:
+            map_id = getattr(available_maps[0], "map_id", None)
+            if isinstance(map_id, int) and not isinstance(map_id, bool):
+                return map_id
 
         return None
 
@@ -425,11 +448,12 @@ class DreameMowerDevice:
 
             self._vector_map = vector_map
             self.refresh_current_map_id()
+            active_vector_map = self._resolved_vector_map() or vector_map
             _LOGGER.debug(
                 "Vector map updated: %d zones, %d paths, boundary=%s",
-                len(vector_map.zones),
-                len(vector_map.paths),
-                vector_map.boundary,
+                len(active_vector_map.zones),
+                len(active_vector_map.paths),
+                active_vector_map.boundary,
             )
             self._notify_property_change("vector_map_updated", True)
             return True
@@ -1150,10 +1174,11 @@ class DreameMowerDevice:
 
     def _validate_zone_ids(self, zone_ids: list[int]) -> bool:
         """Return True when all requested zone IDs exist in the loaded map."""
-        if self._vector_map is None:
+        vector_map = self.vector_map
+        if vector_map is None:
             return True
 
-        available_zone_ids = {zone.zone_id for zone in self._vector_map.zones}
+        available_zone_ids = {zone.zone_id for zone in vector_map.zones}
         invalid_zone_ids = [zone_id for zone_id in zone_ids if zone_id not in available_zone_ids]
         if invalid_zone_ids:
             _LOGGER.error(
@@ -1178,10 +1203,11 @@ class DreameMowerDevice:
 
     def _validate_spot_area_ids(self, spot_area_ids: list[int]) -> bool:
         """Return True when all requested spot area IDs exist in the loaded map."""
-        if self._vector_map is None:
+        vector_map = self.vector_map
+        if vector_map is None:
             return True
 
-        available_spot_area_ids = {spot_area.area_id for spot_area in self._vector_map.spot_areas}
+        available_spot_area_ids = {spot_area.area_id for spot_area in vector_map.spot_areas}
         invalid_spot_area_ids = [spot_area_id for spot_area_id in spot_area_ids if spot_area_id not in available_spot_area_ids]
         if invalid_spot_area_ids:
             _LOGGER.error(
@@ -1237,27 +1263,28 @@ class DreameMowerDevice:
 
     def _map_bounds_in_meters(self) -> tuple[float, float, float, float] | None:
         """Return map bounds in meters when vector-map geometry is available."""
-        if self._vector_map is None:
+        vector_map = self.vector_map
+        if vector_map is None:
             return None
 
-        if self._vector_map.boundary is not None:
+        if vector_map.boundary is not None:
             return (
-                self._vector_map.boundary.x1 / 100.0,
-                self._vector_map.boundary.y1 / 100.0,
-                self._vector_map.boundary.x2 / 100.0,
-                self._vector_map.boundary.y2 / 100.0,
+                vector_map.boundary.x1 / 100.0,
+                vector_map.boundary.y1 / 100.0,
+                vector_map.boundary.x2 / 100.0,
+                vector_map.boundary.y2 / 100.0,
             )
 
         all_paths: Sequence[Iterable[tuple[int, int]]] = [
-            zone.path for zone in self._vector_map.zones
+            zone.path for zone in vector_map.zones
         ] + [
-            zone.path for zone in self._vector_map.forbidden_areas
+            zone.path for zone in vector_map.forbidden_areas
         ] + [
-            path.path for path in self._vector_map.paths
+            path.path for path in vector_map.paths
         ] + [
-            contour.path for contour in self._vector_map.contours
+            contour.path for contour in vector_map.contours
         ] + [
-            spot_area.path for spot_area in self._vector_map.spot_areas
+            spot_area.path for spot_area in vector_map.spot_areas
         ]
 
         points = [point for path in all_paths for point in path]
@@ -1353,12 +1380,13 @@ class DreameMowerDevice:
         rectangle_bounds: tuple[float, float, float, float],
     ) -> int | None:
         """Resolve the spot-area ID created from a rectangle after a map refresh."""
-        if self._vector_map is None:
+        vector_map = self.vector_map
+        if vector_map is None:
             return None
 
         new_spot_areas = [
             spot_area
-            for spot_area in self._vector_map.spot_areas
+            for spot_area in vector_map.spot_areas
             if spot_area.area_id not in previous_spot_area_ids
         ]
         if len(new_spot_areas) == 1:
@@ -1374,7 +1402,7 @@ class DreameMowerDevice:
 
         matching_spot_areas = [
             spot_area
-            for spot_area in self._vector_map.spot_areas
+            for spot_area in vector_map.spot_areas
             if self._spot_area_matches_rectangle(spot_area, rectangle_bounds)
         ]
         if len(matching_spot_areas) == 1:
@@ -1464,10 +1492,11 @@ class DreameMowerDevice:
             )
             return False
 
-        if self._vector_map is None:
+        vector_map = self.vector_map
+        if vector_map is None:
             return True
 
-        available_contour_ids = {contour.contour_id for contour in self._vector_map.contours}
+        available_contour_ids = {contour.contour_id for contour in vector_map.contours}
         unknown_contour_ids = [
             contour_id
             for contour_id in contour_ids
@@ -1601,8 +1630,8 @@ class DreameMowerDevice:
             return None
 
         previous_spot_area_ids = (
-            {spot_area.area_id for spot_area in self._vector_map.spot_areas}
-            if self._vector_map is not None
+            {spot_area.area_id for spot_area in self.vector_map.spot_areas}
+            if self.vector_map is not None
             else set()
         )
 
@@ -1712,28 +1741,31 @@ class DreameMowerDevice:
         Returns a list of dicts with keys: id, name, area.
         Returns empty list if vector map is not available.
         """
-        if self._vector_map is None:
+        vector_map = self.vector_map
+        if vector_map is None:
             return []
         return [
             {"id": z.zone_id, "name": z.name, "area": z.area}
-            for z in self._vector_map.zones
+            for z in vector_map.zones
         ]
 
     @property
     def contours(self) -> list[list[int]]:
         """Return available edge-mowing contour IDs from the vector map."""
-        if self._vector_map is None:
+        vector_map = self.vector_map
+        if vector_map is None:
             return []
-        return [list(contour.contour_id) for contour in self._vector_map.contours]
+        return [list(contour.contour_id) for contour in vector_map.contours]
 
     @property
     def spot_areas(self) -> list[dict]:
         """Return available spot-mowing area IDs from the vector map."""
-        if self._vector_map is None:
+        vector_map = self.vector_map
+        if vector_map is None:
             return []
         return [
             {"id": spot_area.area_id, "name": spot_area.name, "area": spot_area.area}
-            for spot_area in self._vector_map.spot_areas
+            for spot_area in vector_map.spot_areas
         ]
 
     async def pause(self) -> bool:

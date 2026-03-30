@@ -741,6 +741,40 @@ def test_fetch_vector_map_updates_current_map_id_from_mapl(device):
     assert device.current_map_id == 2
 
 
+def test_active_map_geometry_uses_current_map_id(device):
+    """Zones and contours should resolve from the active map, not the first parsed map."""
+    front_map = SimpleNamespace(
+        zones=[SimpleNamespace(zone_id=1, name="Front zone", area=10.0)],
+        contours=[SimpleNamespace(contour_id=(1, 0))],
+        spot_areas=[],
+        forbidden_areas=[],
+        paths=[],
+        boundary=None,
+    )
+    back_map = SimpleNamespace(
+        zones=[SimpleNamespace(zone_id=7, name="Back zone", area=20.0)],
+        contours=[SimpleNamespace(contour_id=(7, 1))],
+        spot_areas=[],
+        forbidden_areas=[],
+        paths=[],
+        boundary=None,
+    )
+    device._current_map_id = 2
+    device._vector_map = SimpleNamespace(
+        map_id=1,
+        current_map_id=None,
+        available_maps=[
+            SimpleNamespace(map_id=1, map_index=0, name="Front", total_area=25.0),
+            SimpleNamespace(map_id=2, map_index=1, name="Back", total_area=30.5),
+        ],
+        maps={1: front_map, 2: back_map},
+    )
+
+    assert device.vector_map is back_map
+    assert device.zones == [{"id": 7, "name": "Back zone", "area": 20.0}]
+    assert device.contours == [[7, 1]]
+
+
 def test_refresh_current_map_id_keeps_existing_value_when_mapl_has_no_active_map(device):
     """Malformed or incomplete MAPL data should not clear a known current map."""
     device._current_map_id = 2

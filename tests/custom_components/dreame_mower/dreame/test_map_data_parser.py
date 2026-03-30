@@ -126,6 +126,21 @@ def test_parse_mower_map_contours():
     assert result.contours[0].path == [(5, 6)]
 
 
+def test_parse_mower_map_contours_accepts_string_ids():
+    map_json = _make_map_json(
+        contours={
+            "dataType": "Map",
+            "value": [
+                ["1,0", {"path": [{"x": 5, "y": 6}], "type": 7, "shapeType": 0}],
+            ],
+        }
+    )
+    result = parse_mower_map(map_json)
+    assert len(result.contours) == 1
+    assert result.contours[0].contour_id == (1, 0)
+    assert result.contours[0].path == [(5, 6)]
+
+
 def test_parse_mower_map_spot_areas():
     map_json = _make_map_json(
         spotAreas={
@@ -241,3 +256,5 @@ def test_parse_batch_map_data_tracks_available_maps_and_active_map():
         (1, 0, "Front"),
         (2, 1, "Back"),
     ]
+    assert sorted(result.maps) == [1, 2]
+    assert result.maps[2].name == "Back"

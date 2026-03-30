@@ -8,6 +8,8 @@ will automatically route to its corresponding module (e.g., switch.py, button.py
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -15,6 +17,8 @@ from homeassistant.core import HomeAssistant
 from .const import DATA_COORDINATOR, DATA_PLATFORMS, DOMAIN
 from .coordinator import DreameMowerCoordinator
 from .config_flow import DEVICE_TYPE_SWBOT
+
+_LOGGER = logging.getLogger(__name__)
 
 _MOWER_PLATFORMS = (
     Platform.LAWN_MOWER,
@@ -41,6 +45,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Connect to the device
     await coordinator.async_connect_device()
+
+    if coordinator.device_type != DEVICE_TYPE_SWBOT:
+        try:
+            await hass.async_add_executor_job(coordinator.device.fetch_vector_map)
+        except Exception as ex:
+            _LOGGER.warning("Initial vector map fetch failed: %s", ex)
     
     # Start coordinator updates (minimal - may not do anything initially)
     await coordinator.async_config_entry_first_refresh()
