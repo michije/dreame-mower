@@ -146,6 +146,7 @@ class DreameMowerDevice:
         self._status_code = 0
         
         # MQTT properties
+        self._wifi_rssi: int | None = None
         self._bluetooth_connected: bool | None = None
         self._charging_status: str | None = None
         self._ota_state: str | None = None
@@ -170,9 +171,16 @@ class DreameMowerDevice:
         self._vector_map: MowerVectorMap | None = None
         self._current_map_id: int | None = None
 
+        # Blade usage tracking - accumulated from mission completion events (4:1)
+        # These reset on HA restart; persistence can be added later via .storage
+        self._total_mowing_minutes: int = 0
+        self._total_mowed_area_sqm: float = 0.0
+        self._completed_missions: int = 0
+        self._blade_reset_timestamp: datetime = datetime.now()
+
         # Property change callbacks
         self._property_callbacks: list[Callable[[str, Any], None]] = []
-        
+
         # Stop-then-dock sequence - wait for mission completion event
         self._mission_completed_event: asyncio.Event = asyncio.Event()
 
@@ -200,6 +208,11 @@ class DreameMowerDevice:
     def battery_percent(self) -> int:
         """Return battery percentage."""
         return self._battery_percent
+
+    @property
+    def wifi_rssi(self) -> int | None:
+        """Return WiFi signal strength in dBm."""
+        return self._wifi_rssi
 
     @property
     def status(self) -> str:
@@ -288,6 +301,44 @@ class DreameMowerDevice:
     def service5_property_108(self) -> int | None:
         """Return Service 5 property 108 value."""
         return self._service5_handler.property_108_value
+
+    # --- Blade usage tracking properties ---
+
+    @property
+    def total_mowing_minutes(self) -> int:
+        """Return total accumulated mowing minutes from completed missions."""
+        return self._total_mowing_minutes
+
+    @property
+    def total_mowing_hours(self) -> float:
+        """Return total accumulated mowing hours (rounded to 1 decimal)."""
+        return round(self._total_mowing_minutes / 60.0, 1)
+
+    @property
+    def total_mowed_area_sqm(self) -> float:
+        """Return total accumulated mowed area in square meters."""
+        return self._total_mowed_area_sqm
+
+    @property
+    def completed_missions(self) -> int:
+        """Return total number of completed mowing missions since last blade reset."""
+        return self._completed_missions
+
+    @property
+    def blade_reset_timestamp(self) -> datetime:
+        """Return timestamp of last blade counter reset (or integration start)."""
+        return self._blade_reset_timestamp
+
+    def reset_blade_usage(self) -> None:
+        """Reset blade usage counters (e.g. after blade replacement)."""
+        self._total_mowing_minutes = 0
+        self._total_mowed_area_sqm = 0.0
+        self._completed_missions = 0
+        self._blade_reset_timestamp = datetime.now()
+        self._notify_property_change("blade_usage_reset", {
+            "reset_timestamp": self._blade_reset_timestamp.isoformat(),
+        })
+        _LOGGER.info("Blade usage counters reset")
 
     @property
     def device_code(self) -> int | None:
@@ -554,7 +605,17 @@ class DreameMowerDevice:
             if "model" in device_info:
                 model = device_info["model"]
                 self._device_code_handler.set_model(model)
-            
+
+            # Update WiFi RSSI from cloud API response
+            if "rssi" in device_info:
+                try:
+                    old_rssi = self._wifi_rssi
+                    self._wifi_rssi = int(device_info["rssi"])
+                    if old_rssi != self._wifi_rssi:
+                        self._notify_property_change("wifi_rssi", self._wifi_rssi)
+                except (ValueError, TypeError):
+                    _LOGGER.debug("Invalid rssi value in device info: %s", device_info["rssi"])
+
             # Update last update timestamp
             self._last_update = datetime.now()
         except Exception as ex:
@@ -628,9 +689,13 @@ class DreameMowerDevice:
                 old_status_code = self._status_code
                 self._status_code = status_code
                 if old_status_code != status_code:
-                    # Reset mission completion flag when mowing starts (status 1)
-                    if status_code == 1:  # 1 = mowing
-                        self._pose_coverage_handler.reset_mission_completion()
+                    # Reset progress and mission completion flag when mowing starts (status 1)
+                    if status_code == DeviceStatus.MOWING:
+                        self._pose_coverage_handler.reset_progress()
+                    # Clear task state when mower reaches standby or charging complete
+                    # These statuses indicate the mission lifecycle has ended
+                    elif status_code in (DeviceStatus.STANDBY, DeviceStatus.CHARGING_COMPLETE):
+                        self._scheduling_handler.reset_task()
                     self._notify_property_change(STATUS_PROPERTY.name, status_code)
             elif BLUETOOTH_PROPERTY.matches(siid, piid):
                 bluetooth_value = bool(message["value"])
@@ -888,10 +953,16 @@ class DreameMowerDevice:
                 if handled:
                     # Signal that mission is completed for stop-then-dock sequence
                     self._mission_completed_event.set()
-                    
+
                     # Mark mission as completed in pose coverage handler to cap progress at 100%
                     self._pose_coverage_handler.mark_mission_completed()
-                    
+
+                    # Clear task state so the task sensor transitions to 'Inactive'
+                    self._scheduling_handler.reset_task()
+
+                    # Accumulate blade usage from mission completion data
+                    self._accumulate_blade_usage()
+
                     if self._mission_completion_handler.has_data_file:
                         self._mission_completion_handler.download_and_set_data_file(
                             self._cloud_device.get_file_download_url, self._hass_config_dir
@@ -904,6 +975,34 @@ class DreameMowerDevice:
         except Exception as ex:
             _LOGGER.error("Failed to handle MQTT event: %s", ex)
             return False
+
+    def _accumulate_blade_usage(self) -> None:
+        """Accumulate blade usage from the latest mission completion event."""
+        try:
+            duration = self._mission_completion_handler.duration_minutes
+            area = self._mission_completion_handler.area_sqm
+
+            if duration is not None and duration > 0:
+                self._total_mowing_minutes += duration
+            if area is not None and area > 0:
+                self._total_mowed_area_sqm += area
+
+            self._completed_missions += 1
+
+            _LOGGER.info(
+                "Blade usage updated: +%s min, +%s m² (totals: %s min, %s m², %s missions)",
+                duration, area,
+                self._total_mowing_minutes, self._total_mowed_area_sqm, self._completed_missions,
+            )
+
+            # Notify listeners so the blade sensor updates
+            self._notify_property_change("blade_usage", {
+                "total_mowing_minutes": self._total_mowing_minutes,
+                "total_mowed_area_sqm": self._total_mowed_area_sqm,
+                "completed_missions": self._completed_missions,
+            })
+        except Exception as ex:
+            _LOGGER.error("Failed to accumulate blade usage: %s", ex)
 
     def _handle_mqtt_props(self, params: dict[str, Any]) -> bool:
         """Handle MQTT props messages with direct property updates."""
@@ -927,6 +1026,17 @@ class DreameMowerDevice:
                     if old_progress != self._ota_progress:
                         self._notify_property_change("ota_progress", self._ota_progress)
                         _LOGGER.debug("OTA progress updated: %s%%", self._ota_progress)
+                    handled_any = True
+                elif key in ("wifi_rssi", "rssi"):
+                    # Handle WiFi signal strength updates
+                    try:
+                        old_rssi = self._wifi_rssi
+                        self._wifi_rssi = int(value)
+                        if old_rssi != self._wifi_rssi:
+                            self._notify_property_change("wifi_rssi", self._wifi_rssi)
+                            _LOGGER.debug("WiFi RSSI updated: %s dBm", self._wifi_rssi)
+                    except (ValueError, TypeError):
+                        _LOGGER.debug("Invalid wifi_rssi value in props: %s", value)
                     handled_any = True
                 else:
                     # Log unhandled properties for future implementation
@@ -999,7 +1109,7 @@ class DreameMowerDevice:
             return False
         
         # Reset mission completion flag for new mowing session
-        self._pose_coverage_handler.reset_mission_completion()
+        self._pose_coverage_handler.reset_progress()
         
         self._notify_property_change("activity", "mowing")
         return True
@@ -1445,7 +1555,7 @@ class DreameMowerDevice:
             return False
 
         _LOGGER.info("All-area mowing started for map ID: %s", map_id)
-        self._pose_coverage_handler.reset_mission_completion()
+        self._pose_coverage_handler.reset_progress()
         self._notify_property_change("activity", "mowing")
         return True
 
@@ -1563,7 +1673,7 @@ class DreameMowerDevice:
             return False
 
         _LOGGER.info("Zone mowing started for zones: %s", zone_ids)
-        self._pose_coverage_handler.reset_mission_completion()
+        self._pose_coverage_handler.reset_progress()
         self._notify_property_change("activity", "mowing")
         return True
 
@@ -1595,7 +1705,7 @@ class DreameMowerDevice:
             return False
 
         _LOGGER.info("Edge mowing started for contours: %s", contour_ids)
-        self._pose_coverage_handler.reset_mission_completion()
+        self._pose_coverage_handler.reset_progress()
         self._notify_property_change("activity", "mowing")
         return True
 
@@ -1620,7 +1730,7 @@ class DreameMowerDevice:
             return False
 
         _LOGGER.info("Spot mowing started for spot areas: %s", spot_area_ids)
-        self._pose_coverage_handler.reset_mission_completion()
+        self._pose_coverage_handler.reset_progress()
         self._notify_property_change("activity", "mowing")
         return True
 

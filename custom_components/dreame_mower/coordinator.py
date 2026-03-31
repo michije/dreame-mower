@@ -109,6 +109,11 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "current_segment": self.current_segment,
             "mower_heading": self.mower_heading,
             "mowing_path_history": self.mowing_path_history,
+            "firmware_install_state": self.device_firmware_install_state,
+            "firmware_download_progress": self.device_firmware_download_progress,
+            "ota_state": self.device_ota_state,
+            "ota_progress": self.device_ota_progress,
+            "wifi_rssi": self.device_wifi_rssi,
         }
 
     @property
@@ -160,6 +165,11 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def device_battery_percent(self) -> int | None:
         """Return device battery percentage."""
         return self.device.battery_percent
+
+    @property
+    def device_wifi_rssi(self) -> int | None:
+        """Return WiFi signal strength in dBm."""
+        return self.device.wifi_rssi
 
     @property
     def device_status(self) -> str | None:
@@ -245,6 +255,53 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def mowing_path_history(self) -> list[dict[str, Any]]:
         """Return path history for visualization."""
         return self.device.mowing_path_history
+
+    @property
+    def device_firmware_install_state(self) -> int | None:
+        """Return firmware installation state."""
+        return self.device.firmware_install_state
+
+    @property
+    def device_firmware_download_progress(self) -> int | None:
+        """Return firmware download progress percentage."""
+        return self.device.firmware_download_progress
+
+    @property
+    def device_ota_state(self) -> str | None:
+        """Return OTA update state."""
+        return self.device.ota_state
+
+    @property
+    def device_ota_progress(self) -> int | None:
+        """Return OTA update progress percentage."""
+        return self.device.ota_progress
+
+    # --- Blade usage tracking properties ---
+
+    @property
+    def blade_total_mowing_hours(self) -> float:
+        """Return total blade mowing hours."""
+        return self.device.total_mowing_hours
+
+    @property
+    def blade_total_mowing_minutes(self) -> int:
+        """Return total blade mowing minutes."""
+        return self.device.total_mowing_minutes
+
+    @property
+    def blade_total_mowed_area_sqm(self) -> float:
+        """Return total mowed area in square meters since blade reset."""
+        return self.device.total_mowed_area_sqm
+
+    @property
+    def blade_completed_missions(self) -> int:
+        """Return number of completed missions since blade reset."""
+        return self.device.completed_missions
+
+    @property
+    def blade_reset_timestamp(self) -> str:
+        """Return ISO timestamp of last blade reset."""
+        return self.device.blade_reset_timestamp.isoformat()
 
     @property
     def zones(self) -> list[dict]:

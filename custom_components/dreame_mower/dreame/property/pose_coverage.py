@@ -299,11 +299,25 @@ class PoseCoverageHandler:
     
     def reset_mission_completion(self) -> None:
         """Reset the mission completion flag for a new mission.
-        
+
         Called when a new mowing session starts to allow normal progress tracking.
         """
         self._mission_completed = False
         _LOGGER.debug("Mission completion flag reset")
+
+    def reset_progress(self) -> None:
+        """Reset progress tracking data for a new mission.
+
+        Called when a new mowing session starts so stale progress from
+        the previous mission is not displayed while waiting for the first
+        1:4 telemetry update.
+        """
+        self._current_area_sqm = None
+        self._total_area_sqm = None
+        self._progress_percent = None
+        self._mission_completed = False
+        self.clear_path_history()
+        _LOGGER.debug("Progress data reset for new mission")
 
 
 # Unified property handler combining both functionalities

@@ -74,19 +74,19 @@ class TestCoordToPixel:
     @pytest.mark.parametrize(
         "x,y,bounds,img_width,img_height,padding,expected",
         [
-            # Bottom-left corner (Y coordinate is flipped in SVG; map is centred vertically)
-            (0, 0, (0, 0, 1000, 800), 1200, 1000, 50, (50, 940)),
-            
-            # Top-right corner
-            (1000, 800, (0, 0, 1000, 800), 1200, 1000, 50, (1150, 59)),
-            
+            # Origin maps to top-left (Y is NOT flipped; map centred vertically)
+            (0, 0, (0, 0, 1000, 800), 1200, 1000, 50, (50, 59)),
+
+            # Max corner maps to bottom-right
+            (1000, 800, (0, 0, 1000, 800), 1200, 1000, 50, (1150, 940)),
+
             # Center point (aspect ratio preserved, map centred)
             (500, 400, (0, 0, 1000, 800), 1200, 1000, 50, (600, 500)),
-            
-            # Single point bounds - function adds 100 to create valid dimensions; map centred horizontally
-            (100, 200, (100, 200, 100, 200), 1200, 1000, 50, (150, 950)),
-            
-            # Negative coordinates with aspect ratio maintained; map centred horizontally
+
+            # Single point bounds - function adds 100 to create valid dimensions
+            (100, 200, (100, 200, 100, 200), 1200, 1000, 50, (150, 50)),
+
+            # Negative coordinates with aspect ratio maintained; map centred
             (0, 0, (-100, -200, 100, 200), 1200, 1000, 50, (600, 500)),
         ],
     )

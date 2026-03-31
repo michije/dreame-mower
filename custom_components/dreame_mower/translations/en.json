@@ -111,6 +111,24 @@
       },
       "current_task": {
         "name": "Current task"
+      },
+      "current_area": {
+        "name": "Current area"
+      },
+      "total_area": {
+        "name": "Total area"
+      },
+      "elapsed_time": {
+        "name": "Elapsed time"
+      },
+      "firmware_update": {
+        "name": "Firmware update"
+      },
+      "blade_usage": {
+        "name": "Blade usage"
+      },
+      "wifi_signal": {
+        "name": "WiFi signal"
       }
     },
     "camera": {

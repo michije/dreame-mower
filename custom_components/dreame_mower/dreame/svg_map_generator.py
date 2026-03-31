@@ -145,8 +145,11 @@ def coord_to_pixel(x: int, y: int, bounds: Tuple[int, int, int, int],
 
     # Convert coordinates
     pixel_x = int(offset_x + (x - min_x) * scale)
-    # Flip Y coordinate (image coordinates have origin at top-left)
-    pixel_y = int(offset_y + (max_y - y) * scale)
+    # Dreame mower coordinates use Y-up (mathematical convention) but the
+    # official Dreame app renders maps WITHOUT flipping Y — the dock (high Y)
+    # appears at the bottom and the far end of the garden (low Y) at the top.
+    # We match this orientation so users see the same layout as the app.
+    pixel_y = int(offset_y + (y - min_y) * scale)
     
     return pixel_x, pixel_y
 

@@ -34,7 +34,7 @@ class TaskType(Enum):
 
 class TaskHandler:
     """Handler for mission task descriptor property (2:50)."""
-    
+
     def __init__(self) -> None:
         """Initialize task handler."""
         self._task_type: TaskType | None = None
@@ -44,6 +44,21 @@ class TaskHandler:
         self._region_id: list[int] | None = None
         self._task_active: bool | None = None
         self._elapsed_time: int | None = None
+
+    def reset(self) -> None:
+        """Reset all task state to initial values.
+
+        Called when a mission completes or the mower returns to standby,
+        so that current_task_data properly reflects 'no active task'.
+        """
+        self._task_type = None
+        self._area_id = None
+        self._execution_active = None
+        self._coverage_target = None
+        self._region_id = None
+        self._task_active = None
+        self._elapsed_time = None
+        _LOGGER.debug("TaskHandler reset - all task state cleared")
     
     def parse_value(self, value: Any) -> bool:
         """Parse task descriptor value."""
@@ -177,11 +192,19 @@ class SummaryHandler:
 
 class SchedulingPropertyHandler:
     """Combined handler for scheduling properties (2:50, 2:52)."""
-    
+
     def __init__(self) -> None:
         """Initialize scheduling property handler."""
         self._task_handler = TaskHandler()
         self._summary_handler = SummaryHandler()
+
+    def reset_task(self) -> None:
+        """Reset the task handler state.
+
+        Called on mission completion events and when the device enters standby/charging
+        to ensure the task sensor correctly transitions to 'Inactive'.
+        """
+        self._task_handler.reset()
     
     def handle_property_update(self, siid: int, piid: int, value: Any, notify_callback) -> bool:
         """Handle scheduling property update with unified logic."""

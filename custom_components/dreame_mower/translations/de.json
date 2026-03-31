@@ -110,6 +110,24 @@
       },
       "current_task": {
         "name": "Aktuelle Aufgabe"
+      },
+      "current_area": {
+        "name": "Aktuelle Fläche"
+      },
+      "total_area": {
+        "name": "Gesamtfläche"
+      },
+      "elapsed_time": {
+        "name": "Verstrichene Zeit"
+      },
+      "firmware_update": {
+        "name": "Firmware-Update"
+      },
+      "blade_usage": {
+        "name": "Messernutzung"
+      },
+      "wifi_signal": {
+        "name": "WLAN-Signal"
       }
     },
     "camera": {
