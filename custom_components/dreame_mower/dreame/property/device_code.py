@@ -218,445 +218,445 @@ BASE_DEVICE_CODES: Dict[int, DeviceCodeDefinition] = {
     0: DeviceCodeDefinition(
         code=0,
         name="NO_DEVICE_CODE",  # Note, should rather be FAULT_HANGING
-        description="No device code - normal operation",
+        description="Kein Fehler – Normalbetrieb",
         code_type=DeviceCodeType.INFO
     ),
     1: DeviceCodeDefinition(
         code=1,
         name="TILTED",
-        description="Robot tilted",
+        description="Mäher ist gekippt",
         code_type=DeviceCodeType.ERROR
     ),
     2: DeviceCodeDefinition(
         code=2,
         name="TRAPPED",
-        description="Mower got stuck and cannot continue",
+        description="Mäher steckt fest",
         code_type=DeviceCodeType.ERROR
     ),
     3: DeviceCodeDefinition(
         code=3,
         name="NARROW_PATH_TO_STATION",
-        description="Passable area near the docking station is too narrow",
+        description="Durchgang zur Ladestation ist zu eng",
         code_type=DeviceCodeType.ERROR
     ),
     4: DeviceCodeDefinition(
         code=4,
         name="LEFT_WHEEL",
-        description="Left drive wheel error",
+        description="Fehler am linken Antriebsrad",
         code_type=DeviceCodeType.ERROR
     ),
     5: DeviceCodeDefinition(
         code=5,
         name="RIGHT_WHEEL",
-        description="Right drive wheel error",
+        description="Fehler am rechten Antriebsrad",
         code_type=DeviceCodeType.ERROR
     ),
     6: DeviceCodeDefinition(
         code=6,
         name="LIFT_MOTOR",
-        description="Lift motor error",
+        description="Fehler am Hubmotor",
         code_type=DeviceCodeType.ERROR
     ),
     7: DeviceCodeDefinition(
         code=7,
         name="CUTTER",
-        description="Cutter disc cannot rotate",
+        description="Mähscheibe kann nicht drehen",
         code_type=DeviceCodeType.ERROR
     ),
     8: DeviceCodeDefinition(
         code=8,
         name="SIDED_MOTOR",
-        description="Side motor error",
+        description="Fehler am Seitenmotor",
         code_type=DeviceCodeType.ERROR
     ),
     9: DeviceCodeDefinition(
         code=9,
         name="CRASH_PLATE",
-        description="Bumper error",
+        description="Bumper-Fehler",
         code_type=DeviceCodeType.ERROR
     ),
     10: DeviceCodeDefinition(
         code=10,
         name="CHARGING",
-        description="Charging error",
+        description="Ladefehler",
         code_type=DeviceCodeType.ERROR
     ),
     11: DeviceCodeDefinition(
         code=11,
         name="BATTERY_OVERHEAT",
-        description="Battery temperature is too high",
+        description="Akku-Temperatur zu hoch",
         code_type=DeviceCodeType.ERROR
     ),
     12: DeviceCodeDefinition(
         code=12,
         name="LIDAR_COVERED",
-        description="LiDAR is blocked",
+        description="LiDAR ist blockiert",
         code_type=DeviceCodeType.ERROR
     ),
     13: DeviceCodeDefinition(
         code=13,
         name="LIDAR_OVERHEAT_WITHOUT_MAP",
-        description="LiDAR overheated while operating without a map",
+        description="LiDAR überhitzt (ohne Karte)",
         code_type=DeviceCodeType.ERROR
     ),
     14: DeviceCodeDefinition(
         code=14,
         name="LIDAR_OVERHEAT_WITH_MAP",
-        description="LiDAR overheated while operating with a map",
+        description="LiDAR überhitzt (mit Karte)",
         code_type=DeviceCodeType.ERROR
     ),
     15: DeviceCodeDefinition(
         code=15,
         name="LIDAR_OVERHEAT",
-        description="LiDAR overheated",
+        description="LiDAR überhitzt",
         code_type=DeviceCodeType.ERROR
     ),
     16: DeviceCodeDefinition(
         code=16,
         name="LIDAR_DIRTY",
-        description="LiDAR sensor is dirty",
+        description="LiDAR-Sensor ist verschmutzt",
         code_type=DeviceCodeType.ERROR
     ),
     17: DeviceCodeDefinition(
         code=17,
         name="LIDAR_ABNORMAL",
-        description="LiDAR sensor abnormal",
+        description="LiDAR-Sensor Störung",
         code_type=DeviceCodeType.ERROR
     ),
     18: DeviceCodeDefinition(
         code=18,
         name="LOCATION_WEAK",
-        description="Robot is out of map boundaries",
+        description="Mäher außerhalb der Karte",
         code_type=DeviceCodeType.ERROR
     ),
     19: DeviceCodeDefinition(
         code=19,
         name="LOCATION_LOST",
-        description="Robot is lost",
+        description="Mäher hat sich verfahren",
         code_type=DeviceCodeType.ERROR
     ),
     20: DeviceCodeDefinition(
         code=20,
         name="SENSOR",
-        description="Sensor error",
+        description="Sensorfehler",
         code_type=DeviceCodeType.ERROR
     ),
     21: DeviceCodeDefinition(
         code=21,
         name="IN_FORBIDDEN_AREA",
-        description="The robot is stuck in a no-go zone",
+        description="Mäher steckt in einer Sperrzone fest",
         code_type=DeviceCodeType.ERROR
     ),
     22: DeviceCodeDefinition(
         code=22,
         name="OUT_OF_MAP",
-        description="Robot is out of map boundaries",
+        description="Mäher außerhalb der Karte",
         code_type=DeviceCodeType.ERROR
     ),
     23: DeviceCodeDefinition(
         code=23,
         name="EMERGENCY_STOP",
-        description="Emergency stop button was pressed",
+        description="Not-Aus wurde gedrückt",
         code_type=DeviceCodeType.ERROR
     ),
     24: DeviceCodeDefinition(
         code=24,
         name="BATTERY_LOW",
-        description="Battery is low, powering off",
+        description="Akku leer, schaltet ab",
         code_type=DeviceCodeType.ERROR
     ),
     25: DeviceCodeDefinition(
         code=25,
         name="MAP_FILE_CRACK",
-        description="Map file is corrupted",
+        description="Kartendatei ist beschädigt",
         code_type=DeviceCodeType.ERROR
     ),
     26: DeviceCodeDefinition(
         code=26,
         name="AWAY_FROM_MAP",
-        description="Robot is too far from the mapped area",
+        description="Mäher ist zu weit vom Kartenbereich entfernt",
         code_type=DeviceCodeType.ERROR
     ),
     27: DeviceCodeDefinition(
         code=27,
         name="HUMAN_DETECTED",
-        description="Positioning failed",
+        description="Positionierung fehlgeschlagen",
         code_type=DeviceCodeType.ERROR
     ),
     28: DeviceCodeDefinition(
         code=28,
         name="BLADE_LOSS",
-        description="Blades lost or worn out",
+        description="Messer verloren oder abgenutzt",
         code_type=DeviceCodeType.ERROR
-    ),  
+    ),
     29: DeviceCodeDefinition(
         code=29,
         name="STATION_LOSS",
-        description="Docking station signal lost",
+        description="Signal der Ladestation verloren",
         code_type=DeviceCodeType.ERROR
     ),
     30: DeviceCodeDefinition(
         code=30,
         name="MAINTAIN_LOSS",
-        description="Maintenance reminder requires attention",
+        description="Wartung erforderlich",
         code_type=DeviceCodeType.ERROR
     ),
     31: DeviceCodeDefinition(
         code=31,
         name="BACK_CHARGE_FAILED",
-        description="Failed to return for charging",
+        description="Rückkehr zum Laden fehlgeschlagen",
         code_type=DeviceCodeType.WARNING
     ),
     32: DeviceCodeDefinition(
         code=32,
         name="DOCKING_FAILED",
-        description="Failed to dock with the charging station",
+        description="Andocken an Ladestation fehlgeschlagen",
         code_type=DeviceCodeType.WARNING
     ),
     33: DeviceCodeDefinition(
         code=33,
         name="LOCATING_FAILED_WITH_MAP",
-        description="Positioning failed while using an existing map",
+        description="Positionierung fehlgeschlagen (mit Karte)",
         code_type=DeviceCodeType.WARNING
     ),
     34: DeviceCodeDefinition(
         code=34,
         name="LOCATING_FAILED_WITHOUT_MAP",
-        description="Positioning failed while operating without a map",
+        description="Positionierung fehlgeschlagen (ohne Karte)",
         code_type=DeviceCodeType.WARNING
     ),
     35: DeviceCodeDefinition(
         code=35,
         name="LOCATING_ABNORMAL",
-        description="Positioning is abnormal",
+        description="Positionierung gestört",
         code_type=DeviceCodeType.WARNING
     ),
     36: DeviceCodeDefinition(
         code=36,
         name="TASK_START_FAILED",
-        description="Task failed to start",
+        description="Aufgabe konnte nicht gestartet werden",
         code_type=DeviceCodeType.WARNING
     ),
     37: DeviceCodeDefinition(
         code=37,
         name="PATH_IMPASSABLE",
-        description="The current passage is blocked and cannot be traversed",
+        description="Weg ist blockiert, kein Durchkommen",
         code_type=DeviceCodeType.ERROR
     ),
     38: DeviceCodeDefinition(
         code=38,
         name="LIDAR_DIRTY",
-        description="LiDAR sensor is dirty",
+        description="LiDAR-Sensor ist verschmutzt",
         code_type=DeviceCodeType.WARNING
     ),
     39: DeviceCodeDefinition(
         code=39,
         name="CAM_DIRTY",
-        description="Camera is dirty",
+        description="Kamera ist verschmutzt",
         code_type=DeviceCodeType.WARNING
     ),
     40: DeviceCodeDefinition(
         code=40,
         name="CAM_ABNORMAL",
-        description="Camera abnormal",
+        description="Kamera Störung",
         code_type=DeviceCodeType.WARNING
     ),
     41: DeviceCodeDefinition(
         code=41,
         name="CAM_COVER",
-        description="Camera is covered",
+        description="Kamera ist verdeckt",
         code_type=DeviceCodeType.WARNING
     ),
     42: DeviceCodeDefinition(
         code=42,
         name="BATTERY_OVERHEAT",
-        description="Battery temperature is high",
+        description="Akku-Temperatur ist hoch",
         code_type=DeviceCodeType.WARNING
     ),
     43: DeviceCodeDefinition(
         code=43,
         name="BATTERY_TEMP_LOW",
-        description="Charging paused: battery temperature is too low",
+        description="Laden pausiert: Akku-Temperatur zu niedrig",
         code_type=DeviceCodeType.WARNING
     ),
     44: DeviceCodeDefinition(
         code=44,
         name="AUTOBUILD_BORDER",
-        description="Automatic boundary building requires attention",
+        description="Automatische Begrenzungserstellung erfordert Aufmerksamkeit",
         code_type=DeviceCodeType.WARNING
     ),
     45: DeviceCodeDefinition(
         code=45,
         name="AUTOBUILD_SIDE",
-        description="Automatic side building requires attention",
+        description="Automatische Seitenerstellung erfordert Aufmerksamkeit",
         code_type=DeviceCodeType.WARNING
     ),
     46: DeviceCodeDefinition(
         code=46,
         name="BORDER_FINISH",
-        description="Boundary building completed",
+        description="Begrenzung erstellt",
         code_type=DeviceCodeType.INFO
     ),
     47: DeviceCodeDefinition(
         code=47,
         name="NEW_MAP",
-        description="Robot is working, scheduled task cancelled",
+        description="Mäher arbeitet, geplantes Mähen abgebrochen",
         code_type=DeviceCodeType.INFO
     ),
     48: DeviceCodeDefinition(
         code=48,
         name="TASK_FINISH",
-        description="Mowing task completed successfully",
+        description="Mähen erfolgreich abgeschlossen",
         code_type=DeviceCodeType.INFO
     ),
     49: DeviceCodeDefinition(
         code=49,
         name="DESTINATION_NOT_REACHABLE",
-        description="Mowing task started",
+        description="Mähen gestartet",
         code_type=DeviceCodeType.INFO
     ),
     50: DeviceCodeDefinition(
         code=50,
         name="TASK_START",
-        description="Mowing operation started",
+        description="Mähvorgang gestartet",
         code_type=DeviceCodeType.INFO
     ),
     51: DeviceCodeDefinition(
         code=51,
         name="CRUISE_START",
-        description="Cruise task started",
+        description="Erkundungsfahrt gestartet",
         code_type=DeviceCodeType.INFO
     ),
     52: DeviceCodeDefinition(
         code=52,
         name="POINT_AND_GO_START",
-        description="Point-and-go task started",
+        description="Punkt-Anfahrt gestartet",
         code_type=DeviceCodeType.INFO
     ),
     53: DeviceCodeDefinition(
         code=53,
         name="SCHEDULE_START",
-        description="Scheduled task started",
+        description="Geplantes Mähen gestartet",
         code_type=DeviceCodeType.INFO
     ),
     54: DeviceCodeDefinition(
         code=54,
         name="BATTERY_LOW_RETURNING",
-        description="Low battery, returning to dock",
+        description="Akku niedrig, kehrt zur Ladestation zurück",
         code_type=DeviceCodeType.INFO
     ),
     55: DeviceCodeDefinition(
         code=55,
         name="BATTERY_LOW_SCHEDULE_SUSPEND",
-        description="Scheduled task suspended due to low battery",
+        description="Geplantes Mähen pausiert wegen niedrigem Akku",
         code_type=DeviceCodeType.INFO
     ),
     56: DeviceCodeDefinition(
         code=56,
         name="BAD_WEATHER_PROTECTING",
-        description="Operation paused because of bad weather",
+        description="Betrieb pausiert wegen schlechtem Wetter",
         code_type=DeviceCodeType.INFO
     ),
     57: DeviceCodeDefinition(
         code=57,
         name="RAIN_SCHEDULE_INTERUPTED",
-        description="Scheduled task interrupted by rain",
+        description="Geplantes Mähen durch Regen unterbrochen",
         code_type=DeviceCodeType.INFO
     ),
     58: DeviceCodeDefinition(
         code=58,
         name="RAIN_SCHEDULE_SUSPEND",
-        description="Scheduled task suspended because of rain",
+        description="Geplantes Mähen pausiert wegen Regen",
         code_type=DeviceCodeType.INFO
     ),
     59: DeviceCodeDefinition(
         code=59,
         name="FORZEN_RETURNING",
-        description="Returning to dock because of freezing conditions",
+        description="Kehrt zur Ladestation zurück wegen Frost",
         code_type=DeviceCodeType.INFO
     ),
     60: DeviceCodeDefinition(
         code=60,
         name="FROZEN_SCHEDULE_SUSPEND",
-        description="Scheduled task suspended because of freezing conditions",
+        description="Geplantes Mähen pausiert wegen Frost",
         code_type=DeviceCodeType.INFO
     ),
     61: DeviceCodeDefinition(
         code=61,
         name="NOT_DISTURB_RETURNING",
-        description="Do Not Disturb period started",
+        description="Nicht-stören-Zeit begonnen",
         code_type=DeviceCodeType.INFO
     ),
     62: DeviceCodeDefinition(
         code=62,
         name="NOT_DISTURB_SCHEDULE_SUSPEND",
-        description="Scheduled task suspended because of Do Not Disturb mode",
+        description="Geplantes Mähen pausiert wegen Nicht-stören-Modus",
         code_type=DeviceCodeType.INFO
     ),
     63: DeviceCodeDefinition(
         code=63,
         name="WORKING_SCHEDULE_SUSPEND",
-        description="Scheduled task suspended because the mower is already working",
+        description="Geplantes Mähen pausiert, Mäher arbeitet bereits",
         code_type=DeviceCodeType.INFO
     ),
     64: DeviceCodeDefinition(
         code=64,
         name="REMOTE_CONTROLING_SCHEDULE_SUSPEND",
-        description="Scheduled task suspended during remote control",
+        description="Geplantes Mähen pausiert wegen Fernsteuerung",
         code_type=DeviceCodeType.INFO
     ),
     65: DeviceCodeDefinition(
         code=65,
         name="EMERGENCY_STOPPED_SCHEDULE_SUSPEND",
-        description="Scheduled task suspended because emergency stop was triggered",
+        description="Geplantes Mähen pausiert wegen Not-Aus",
         code_type=DeviceCodeType.INFO
     ),
     66: DeviceCodeDefinition(
         code=66,
         name="TOP_COVER_OPEN_SCHEDULE_SUSPEND",
-        description="Scheduled task suspended because the top cover is open",
+        description="Geplantes Mähen pausiert, Abdeckung ist offen",
         code_type=DeviceCodeType.INFO
     ),
     67: DeviceCodeDefinition(
         code=67,
         name="FAULT_MODE_SCHEDULE_SUSPEND",
-        description="Scheduled task suspended because the mower is in fault mode",
+        description="Geplantes Mähen pausiert wegen Störung",
         code_type=DeviceCodeType.INFO
     ),
     68: DeviceCodeDefinition(
         code=68,
         name="SCHEDULE_TIMEOUT",
-        description="Scheduled task timed out",
+        description="Geplantes Mähen Zeitüberschreitung",
         code_type=DeviceCodeType.INFO
     ),
     69: DeviceCodeDefinition(
         code=69,
         name="STATION_NOT_CONNECTED_TO_WORKING_AREA",
-        description="Docking station is not connected to the working area",
+        description="Ladestation ist nicht mit dem Arbeitsbereich verbunden",
         code_type=DeviceCodeType.INFO
     ),
     70: DeviceCodeDefinition(
         code=70,
         name="CONTINUE_FROM_BREAKPOINT",
-        description="Do Not Disturb period ended",
+        description="Nicht-stören-Zeit beendet",
         code_type=DeviceCodeType.INFO
     ),
     71: DeviceCodeDefinition(
         code=71,
         name="IDLE_TIMEOUT_RETURNING",
-        description="Returning to dock after idle timeout",
+        description="Kehrt zur Ladestation zurück nach Leerlauf-Timeout",
         code_type=DeviceCodeType.INFO
     ),
     72: DeviceCodeDefinition(
         code=72,
         name="PAUSE_TIMEOUT_RETURNING",
-        description="Returning to dock after pause timeout",
+        description="Kehrt zur Ladestation zurück nach Pause-Timeout",
         code_type=DeviceCodeType.INFO
     ),
     73: DeviceCodeDefinition(
         code=73,
         name="TOP_COVER_OPEN",
-        description="Top cover is open",
+        description="Abdeckung ist offen",
         code_type=DeviceCodeType.ERROR
     ),
 }
@@ -667,25 +667,25 @@ A1_DEVICE_CODES: Dict[int, DeviceCodeDefinition] = {
     19: DeviceCodeDefinition(
         code=19,
         name="EMERGENCY_STOP_PRESSED",
-        description="Emergency stop pressed",
+        description="Not-Aus gedrückt",
         code_type=DeviceCodeType.ERROR
     ),
     53: DeviceCodeDefinition(
         code=53,
         name="MOWING_STARTED",
-        description="Mowing operation started",
+        description="Mähvorgang gestartet",
         code_type=DeviceCodeType.INFO
     ),
     70: DeviceCodeDefinition(
         code=70,
         name="MOWING_RESUMED_AFTER_CHARGING",
-        description="Mower resumed mowing after recharge",
+        description="Mäher setzt Mähen nach Aufladen fort",
         code_type=DeviceCodeType.INFO
     ),
     73: DeviceCodeDefinition(
         code=73,
         name="ROBOT_LIFTED",
-        description="Robot was lifted",
+        description="Mäher wurde angehoben",
         code_type=DeviceCodeType.ERROR
     ),
 }
@@ -697,49 +697,49 @@ MOVA_DEVICE_CODES: Dict[int, DeviceCodeDefinition] = {
     0: DeviceCodeDefinition(
         code=0,
         name="ROBOT_LIFTED",
-        description="Robot lifted",
+        description="Mäher wurde angehoben",
         code_type=DeviceCodeType.ERROR
     ),
     1: DeviceCodeDefinition(
         code=1,
         name="ROBOT_TILTED",
-        description="Robot tilted",
+        description="Mäher ist gekippt",
         code_type=DeviceCodeType.ERROR
     ),
     4: DeviceCodeDefinition(
         code=4,
         name="LEFT_DRIVE_WHEEL_ERROR",
-        description="Left drive wheel error",
+        description="Fehler am linken Antriebsrad",
         code_type=DeviceCodeType.ERROR
     ),
     5: DeviceCodeDefinition(
         code=5,
         name="RIGHT_DRIVE_WHEEL_ERROR",
-        description="Right drive wheel error",
+        description="Fehler am rechten Antriebsrad",
         code_type=DeviceCodeType.ERROR
     ),
     12: DeviceCodeDefinition(
         code=12,
         name="LIDAR_IS_BLOCKED",
-        description="Lidar is blocked",
+        description="LiDAR ist blockiert",
         code_type=DeviceCodeType.ERROR
     ),
     30: DeviceCodeDefinition(
         code=30,
         name="MAINTENANCE_TIME_REACHED",
-        description="Robot maintenance time reached. Maintain the robot soon",
+        description="Wartung fällig – bitte Mäher warten",
         code_type=DeviceCodeType.WARNING
     ),
     55: DeviceCodeDefinition(
         code=55,
         name="ROBOT_CANT_START_LOW_BATTERY",
-        description="Robot can't start due to low battery",
+        description="Mäher kann nicht starten, Akku zu niedrig",
         code_type=DeviceCodeType.ERROR
     ),
     70: DeviceCodeDefinition(
         code=70,
         name="CONTINUE_UNFINISHED_TASK",
-        description="Robot will continue the unfinished task",
+        description="Mäher setzt unterbrochene Aufgabe fort",
         code_type=DeviceCodeType.INFO
     ),
 }

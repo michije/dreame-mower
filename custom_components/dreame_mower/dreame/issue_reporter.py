@@ -133,6 +133,25 @@ class DreameMowerIssueReporter:
         except Exception as ex:
             _LOGGER.error("Failed to create unhandled MQTT notification: %s", ex)
 
+    @staticmethod
+    def _friendly_device_name(device_model: str) -> str:
+        """Convert internal model ID to a user-friendly device name.
+
+        Internal model IDs like 'mova.mower.g2529c' are not meaningful to users.
+        This method returns a short, readable name for notifications.
+        """
+        if not device_model:
+            return "Mäher"
+        lower = device_model.lower()
+        if "mower" in lower or "mova" in lower:
+            return "Mäher"
+        if "vacuum" in lower:
+            return "Staubsauger"
+        # If it looks like a model ID (contains dots), use generic name
+        if "." in device_model:
+            return "Mäher"
+        return device_model
+
     async def create_device_error_notification(
         self,
         code: int,
@@ -145,17 +164,14 @@ class DreameMowerIssueReporter:
         try:
             # Track this notification for context
             self._track_notification("Error", name, description)
-            
+
+            friendly_name = self._friendly_device_name(device_model)
+
             # Create unique notification ID
             notification_id = f"dreame_mower_device_error_{code}"
-            
-            title = f"🚨 {device_model} Error: {name}"
-            message = (
-                f"**Error Code:** {code}\n\n"
-                f"**Description:** {description}\n\n"
-                f"**Device:** {device_model} (Firmware: {device_firmware})\n\n"
-                f"Please check your mower and address any issues indicated by this error code."
-            )
+
+            title = f"🚨 {friendly_name}: {description}"
+            message = f"Bitte prüfe den Mäher."
             
             # Create the persistent notification in Home Assistant
             await self.hass.services.async_call(
@@ -185,16 +201,14 @@ class DreameMowerIssueReporter:
         try:
             # Track this notification for context
             self._track_notification("Info", name, description)
-            
+
+            friendly_name = self._friendly_device_name(device_model)
+
             # Create unique notification ID
             notification_id = f"dreame_mower_device_info_{code}"
-            
-            title = f"ℹ️ {device_model} Status: {name}"
-            message = (
-                f"**Status Code:** {code}\n\n"
-                f"**Description:** {description}\n\n"
-                f"**Device:** {device_model} (Firmware: {device_firmware})"
-            )
+
+            title = f"ℹ️ {friendly_name}: {description}"
+            message = description
             
             # Create the persistent notification in Home Assistant
             await self.hass.services.async_call(
