@@ -13,7 +13,6 @@ from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfArea, UnitOfTi
 
 from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import DreameMowerCoordinator
-from .dreame.const import DeviceStatus
 from .entity import DreameMowerEntity
 from .config_flow import DEVICE_TYPE_SWBOT
 
@@ -27,12 +26,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up Dreame Mower sensors from config entry."""
     coordinator: DreameMowerCoordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
-    
+
     if coordinator.device_type == DEVICE_TYPE_SWBOT:
         sensors = [
             DreameMowerBatterySensor(coordinator),
             DreameMowerStatusSensor(coordinator),
-            DreameMowerWiFiSignalSensor(coordinator),
         ]
     else:
         # Full mower sensor set
@@ -42,16 +40,13 @@ async def async_setup_entry(
             DreameMowerChargingStatusSensor(coordinator),
             DreameMowerBluetoothSensor(coordinator),
             DreameMowerDeviceCodeSensor(coordinator),
-            DreameMowerTaskSensor(coordinator),
             DreameMowerProgressSensor(coordinator),
             DreameMowerCurrentAreaSensor(coordinator),
             DreameMowerTotalAreaSensor(coordinator),
-            DreameMowerElapsedTimeSensor(coordinator),
             DreameMowerFirmwareUpdateSensor(coordinator),
             DreameMowerBladeUsageSensor(coordinator),
-            DreameMowerWiFiSignalSensor(coordinator),
         ]
-    
+
     async_add_entities(sensors)
 
 
@@ -156,13 +151,13 @@ class DreameMowerDeviceCodeSensor(DreameMowerEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes."""
         attributes: dict[str, Any] = {}
-        
+
         # Add device code details
         if self.coordinator.device_code is not None:
             attributes["code"] = self.coordinator.device_code
             attributes["name"] = self.coordinator.device_code_name
             attributes["description"] = self.coordinator.device_code_description
-            
+
             # Determine type based on priority: error > warning > info
             if self.coordinator.device_code_is_error:
                 attributes["type"] = "error"
@@ -170,81 +165,7 @@ class DreameMowerDeviceCodeSensor(DreameMowerEntity, SensorEntity):
                 attributes["type"] = "warning"
             else:
                 attributes["type"] = "info"
-        
-        return attributes
 
-
-class DreameMowerTaskSensor(DreameMowerEntity, SensorEntity):
-    """Current task sensor for Dreame Mower."""
-
-    def __init__(self, coordinator: DreameMowerCoordinator) -> None:
-        """Initialize the task sensor."""
-        super().__init__(coordinator, "current_task")
-        self._attr_icon = "mdi:clipboard-play"
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
-        self._attr_translation_key = "current_task"
-
-    @property
-    def native_value(self) -> str | None:
-        """Return the current task status.
-
-        State machine:
-          - None:        No task data has ever been received
-          - Inactive:    No task is active (task_active=False or task was reset)
-          - Active:      Task is running AND mower is actively mowing
-          - Recharging:  Task is running BUT mower is returning to/at the dock
-          - Paused:      Task is accepted but execution is paused
-          - Error:       Task is active but mower is paused due to errors
-          - Mapping:     Task is active but mower is in mapping mode
-        """
-        task_data = self.coordinator.current_task_data
-        if not task_data:
-            return None
-
-        execution_active = task_data.get("execution_active", False)
-        task_active = task_data.get("task_active", False)
-
-        if not task_active:
-            return "Inactive"
-
-        if not execution_active:
-            return "Paused"
-
-        # Task is active and execution is active — cross-reference with device status
-        status = self.coordinator.device_status_code
-        if status in (DeviceStatus.RETURNING_TO_CHARGE, DeviceStatus.CHARGING, DeviceStatus.CHARGING_COMPLETE):
-            return "Recharging"
-        if status == DeviceStatus.PAUSED_DUE_TO_ERRORS:
-            return "Error"
-        if status == DeviceStatus.MAPPING:
-            return "Mapping"
-        if status in (DeviceStatus.PAUSED, DeviceStatus.STANDBY):
-            # Device says paused/standby but task still thinks execution is active.
-            # This is a transient race — report as Paused until the task descriptor
-            # catches up (the next 2:50 update will set execution_active=False).
-            return "Paused"
-        return "Active"
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes with detailed task information."""
-        attributes: dict[str, Any] = {}
-
-        task_data = self.coordinator.current_task_data
-        if task_data:
-            attributes.update({
-                "task_type": task_data.get("type"),
-                "execution_active": task_data.get("execution_active"),
-                "task_active": task_data.get("task_active"),
-                "coverage_target": task_data.get("coverage_target"),
-                "area_id": task_data.get("area_id"),
-                "region_id": task_data.get("region_id"),
-                "elapsed_time": task_data.get("elapsed_time"),
-            })
-
-        # Always expose the device status so users can correlate task state
-        attributes["device_status"] = self.coordinator.device_status
-        
         return attributes
 
 
@@ -277,7 +198,7 @@ class DreameMowerProgressSensor(DreameMowerEntity, SensorEntity):
             "total_area_sqm": self.coordinator.total_area_sqm,
             "progress_percent": round(progress, 1) if progress is not None else None,
         }
-        
+
         # Add mower coordinates data
         coordinates = self.coordinator.mower_coordinates
         if coordinates:
@@ -288,7 +209,7 @@ class DreameMowerProgressSensor(DreameMowerEntity, SensorEntity):
             attributes["coordinates"] = None
             attributes["x"] = None
             attributes["y"] = None
-            
+
         attributes["segment"] = self.coordinator.current_segment
         attributes["heading"] = self.coordinator.mower_heading
 
@@ -336,28 +257,6 @@ class DreameMowerTotalAreaSensor(DreameMowerEntity, SensorEntity):
         area = self.coordinator.total_area_sqm
         if area is not None:
             return round(area, 1)
-        return None
-
-
-class DreameMowerElapsedTimeSensor(DreameMowerEntity, SensorEntity):
-    """Elapsed mowing time sensor for current task."""
-
-    def __init__(self, coordinator: DreameMowerCoordinator) -> None:
-        """Initialize the elapsed time sensor."""
-        super().__init__(coordinator, "elapsed_time")
-        self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = "min"
-        self._attr_icon = "mdi:timer"
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
-        self._attr_translation_key = "elapsed_time"
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the elapsed mowing time in minutes."""
-        task_data = self.coordinator.current_task_data
-        if task_data and task_data.get("elapsed_time") is not None:
-            # elapsed_time is in seconds, convert to minutes
-            return round(task_data["elapsed_time"] / 60, 1)
         return None
 
 
@@ -464,22 +363,3 @@ class DreameMowerBladeUsageSensor(DreameMowerEntity, SensorEntity):
             "recommended_life_hours": RECOMMENDED_BLADE_LIFE_HOURS,
             "estimated_life_remaining_percent": remaining_pct,
         }
-
-
-class DreameMowerWiFiSignalSensor(DreameMowerEntity, SensorEntity):
-    """WiFi signal strength sensor for Dreame Mower."""
-
-    def __init__(self, coordinator: DreameMowerCoordinator) -> None:
-        """Initialize the WiFi signal sensor."""
-        super().__init__(coordinator, "wifi_signal")
-        self._attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
-        self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = "dBm"
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
-        self._attr_icon = "mdi:wifi"
-        self._attr_translation_key = "wifi_signal"
-
-    @property
-    def native_value(self) -> int | None:
-        """Return the WiFi signal strength in dBm."""
-        return self.coordinator.device_wifi_rssi
